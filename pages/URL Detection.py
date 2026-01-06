@@ -77,16 +77,11 @@ with tab1:
     if check_btn:
         if not url_input:
             st.error("Please enter a URL to analyze!")
+        elif not url_input.startswith(('http://', 'https://')):
+            st.warning("URL should start with http:// or https://")
         else:
-            # Basic URL validation
-            if not url_input.startswith(('http://', 'https://')):
-                st.warning("URL should start with http:// or https://")
-                url_input = 'https://' + url_input
-            
             with st.spinner("Analyzing URL..."):
                 time.sleep(2)
-                
-                # Parse URL
                 parsed = urlparse(url_input)
                 domain = parsed.netloc
                 
@@ -95,7 +90,6 @@ with tab1:
                 # is_phishing = result['is_phishing']
                 # confidence = result['confidence']
                 
-                suspicious_keywords = ['verify', 'account', 'login', 'secure', 'update', 'confirm']
                 displayed_label = 'Unknown'
                 try:
                     result = predict_url(url_input)
@@ -199,6 +193,7 @@ with tab1:
                     risk_indicators.append("No SSL/TLS encryption")
                     risk_score += 30
                 
+                suspicious_keywords = ['verify', 'account', 'login', 'secure', 'update', 'confirm']
                 if any(keyword in url_input.lower() for keyword in suspicious_keywords):
                     risk_indicators.append("Suspicious keywords in URL")
                     risk_score += 25

@@ -1,9 +1,10 @@
 import os
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, Sequence
 import joblib
 import streamlit as st
 import gdown
+from urllib.parse import urlparse
 
 # Cache loaded models
 _MODEL_CACHE: Dict[str, object] = {}
@@ -102,12 +103,40 @@ def _calculate_confidence(model, payload, label):
 # -----------------------------
 # Public API
 # -----------------------------
+def _url_feature_vector(url_input: str, keywords: Sequence[str] = ('verify', 'account', 'login', 'secure', 'update', 'confirm')) -> list:
+    parsed = urlparse(url_input)
+    domain = parsed.netloc or ''
+    path = parsed.path or ''
+    normalized_url = url_input.lower()
+    digits = sum(1 for ch in url_input if ch.isdigit())
+    hyphen = normalized_url.count('-')
+    underscore = normalized_url.count('_')
+    keyword_hits = sum(1 for kw in keywords if kw in normalized_url)
+
+    domain_depth = max(domain.count('.') - 1, 0)
+    return [
+        float(len(url_input)),
+        float(len(domain)),
+        float(len(path)),
+        float(len(parsed.query)),
+        float(len(parsed.fragment)),
+        1.0 if parsed.scheme == 'https' else 0.0,
+        float(int(parsed.port is not None)),
+        float(domain_depth),
+        float(digits),
+        float(hyphen),
+        float(underscore),
+        float(keyword_hits)
+    ]
+
+
 def predict_url(url_input: str, model_path="models/url_model.joblib"):
     """Predict a single URL with the cached URL model."""
     # Use your secret MODEL_URL
     model_url = _env_model_url("URL_MODEL_URL", "MODEL_URL")
     model = load_model(model_path, model_url)
-    return _model_predict(model, [url_input])
+    features = _url_feature_vector(url_input)
+    return _model_predict(model, [features])
 
 def predict_email(subject: str, body: str, model_path="models/email_model.joblib"):
     """Predict email content using the cached email model (subject+body only)."""
