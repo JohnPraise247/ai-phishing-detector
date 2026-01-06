@@ -4,7 +4,10 @@ import time
 import re
 from urllib.parse import urlparse
 
+import logging
+
 from utils.styles import load_custom_font
+from utils.predictor import predict_url
 
 st.set_page_config(
     page_title="URL Detection", 
@@ -92,13 +95,33 @@ with tab1:
                 # is_phishing = result['is_phishing']
                 # confidence = result['confidence']
                 
-                # DEMO: Simple heuristic (replace with your model)
                 suspicious_keywords = ['verify', 'account', 'login', 'secure', 'update', 'confirm']
-                is_phishing = any(keyword in url_input.lower() for keyword in suspicious_keywords)
-                is_phishing = is_phishing or parsed.scheme == 'http'  # No HTTPS
-                is_phishing = is_phishing or len(domain.split('.')) > 3  # Too many subdomains
-                
-                confidence = 0.89 if is_phishing else 0.94
+                displayed_label = 'Unknown'
+                prediction_source = 'model'
+                try:
+                    result = predict_url(url_input, model_path='models/url_model.joblib')
+                    model_label = result.get('label', '').lower()
+                    confidence = float(result.get('confidence', 0.0))
+                    is_phishing = model_label in ('phishing', 'malware', 'defacement')
+                    displayed_label = model_label.capitalize() if model_label else 'Unknown'
+                except FileNotFoundError as err:
+                    logging.exception("Model file missing")
+                    st.warning("Model file not found. Using heuristic fallback.")
+                    prediction_source = 'heuristic'
+                    is_phishing = any(keyword in url_input.lower() for keyword in suspicious_keywords)
+                    is_phishing = is_phishing or parsed.scheme == 'http'
+                    is_phishing = is_phishing or len(domain.split('.')) > 3
+                    confidence = 0.89 if is_phishing else 0.94
+                    displayed_label = 'Phishing' if is_phishing else 'Safe'
+                except Exception as err:
+                    logging.exception("Model prediction error")
+                    st.warning(f"Model prediction failed: {err}. Using heuristic fallback.")
+                    prediction_source = 'heuristic'
+                    is_phishing = any(keyword in url_input.lower() for keyword in suspicious_keywords)
+                    is_phishing = is_phishing or parsed.scheme == 'http'
+                    is_phishing = is_phishing or len(domain.split('.')) > 3
+                    confidence = 0.89 if is_phishing else 0.94
+                    displayed_label = 'Phishing' if is_phishing else 'Safe'
             
             st.markdown("---")
             st.markdown("#### URL Analysis Results")
@@ -111,6 +134,10 @@ with tab1:
                     </h4>
                 """, unsafe_allow_html=True)
                 st.error("This URL shows multiple phishing indicators. Do not visit!")
+                try:
+                    st.info(f"Prediction: {displayed_label}")
+                except Exception:
+                    pass
             else:
                 st.markdown("""
                     <h4 class="url-safe">
@@ -118,6 +145,10 @@ with tab1:
                     </h4>
                 """, unsafe_allow_html=True)
                 st.success("This website appears to be legitimate and safe to visit.")
+                try:
+                    st.info(f"Prediction: {displayed_label}")
+                except Exception:
+                    pass
             
             # Confidence meter
             st.markdown("#### Confidence Score")

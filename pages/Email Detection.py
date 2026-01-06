@@ -1,8 +1,8 @@
+import logging
 import streamlit as st
 import pandas as pd
 import time
-# import pickle  # Uncomment when you have your model
-# from utils.predictor import predict_email  # Your prediction function
+from utils.predictor import predict_email
 from utils.styles import load_custom_font
 
 st.set_page_config(
@@ -20,22 +20,17 @@ st.markdown("""
     <style>
     .phishing-alert {
         background-color: #ff4444;
-        color: white;
         padding: 2rem;
         border-radius: 10px;
+        margin-bottom: 10px;
         text-align: center;
-        font-size: 1.5rem;
-        font-weight: bold;
         animation: pulse 2s infinite;
     }
     .safe-alert {
         background-color: #00C851;
-        color: white;
         padding: 2rem;
         border-radius: 10px;
         text-align: center;
-        font-size: 1.5rem;
-        font-weight: bold;
     }
     @keyframes pulse {
         0% { opacity: 1; }
@@ -101,33 +96,63 @@ Security Team"""
             with st.spinner("Analyzing email... This may take a few seconds."):
                 time.sleep(2)  # Simulating model prediction
                 
-                # TODO: Replace with actual model prediction
-                # result = predict_email(sender_email, subject, email_body)
-                # is_phishing = result['is_phishing']
-                # confidence = result['confidence']
-                
-                # DEMO: Simulated prediction (remove this when you have your model)
-                is_phishing = "click here" in email_body.lower() or "verify" in email_body.lower()
-                confidence = 0.87 if is_phishing else 0.92
+                suspicious_keywords = ['click here', 'verify', 'confirm', 'urgent', 'account', 'password']
+                displayed_label = 'Unknown'
+                prediction_source = 'model'
+                try:
+                    result = predict_email(
+                        sender_email,
+                        subject,
+                        email_body,
+                        model_path='models/email_model.joblib'
+                    )
+                    model_label = result.get('label', '')
+                    confidence = float(result.get('confidence', 0.0))
+                    normalized = str(model_label).lower()
+                    if normalized in ('1', 'spam', 'spammy'):
+                        is_spam = True
+                        displayed_label = 'Spam'
+                    elif normalized in ('0', 'ham', 'real', 'non-spam'):
+                        is_spam = False
+                        displayed_label = 'Real'
+                    else:
+                        is_spam = False
+                        displayed_label = model_label
+                except FileNotFoundError:
+                    logging.exception("Email model is missing")
+                    st.warning("Email model not found. Falling back to heuristic detection.")
+                    prediction_source = 'heuristic'
+                    is_spam = any(keyword in email_body.lower() for keyword in suspicious_keywords)
+                    confidence = 0.87 if is_spam else 0.92
+                    displayed_label = 'Spam' if is_spam else 'Real'
+                except Exception as err:
+                    logging.exception("Email model prediction failed")
+                    st.warning(f"Email prediction failed ({err}). Using heuristic fallback.")
+                    prediction_source = 'heuristic'
+                    is_spam = any(keyword in email_body.lower() for keyword in suspicious_keywords)
+                    confidence = 0.87 if is_spam else 0.92
+                    displayed_label = 'Spam' if is_spam else 'Real'
                 
             st.markdown("---")
             st.markdown("## Analysis Results")
             
             # Display result
-            if is_phishing:
+            if is_spam:
                 st.markdown("""
-                    <div class="phishing-alert">
-                            PHISHING DETECTED
-                        </div>
+                    <h4 class="phishing-alert">
+                            Phishing Detected
+                        </h4>
                 """, unsafe_allow_html=True)
                 st.error("This email shows strong indicators of being a phishing attempt!")
+                st.markdown(f"**Prediction source:** {prediction_source.capitalize()} | **Label:** {displayed_label}")
             else:
                 st.markdown("""
                     <div class="safe-alert">
-                        EMAIL APPEARS SAFE
+                        Email Appears Safe
                     </div>
                 """, unsafe_allow_html=True)
                 st.success("This email appears to be legitimate.")
+                st.markdown(f"**Prediction source:** {prediction_source.capitalize()} | **Label:** {displayed_label}")
             
             # Confidence score
             st.markdown("### Confidence Score")
@@ -173,7 +198,7 @@ Security Team"""
             
             # Recommendations
             st.markdown("### Recommendations")
-            if is_phishing:
+            if is_spam:
                 st.warning("""
                 **What to do:**
                 - Do NOT click any links in this email
