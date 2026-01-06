@@ -11,6 +11,7 @@ st.set_page_config(
     page_title="Email Detection", 
     page_icon="Email", 
     layout="centered",
+    initial_sidebar_state="auto",
     menu_items={
         'About': "This application uses AI to detect phishing emails and URLs."
     })
@@ -74,6 +75,7 @@ def _render_email_result(is_spam, displayed_label, email_body, subject, sender_e
         st.success("This email appears to be legitimate.")
         st.markdown(f"**Label:** {displayed_label}")
 
+    st.markdown("\n")
     st.markdown("### Detailed Analysis")
 
     col1, col2 = st.columns(2)
@@ -146,15 +148,8 @@ tab1, tab2, tab3 = st.tabs(["Paste Email Content", "Upload Email File", "Batch A
 with tab1:
     st.markdown("### Enter Email Details")
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        subject = st.text_input("Email Subject", placeholder="Enter email subject")
-    
-    with col2:
-        sender_email = st.text_input("Sender Email Address", placeholder="example@domain.com")
-        # sender_name = st.text_input("Sender Name (Optional)", placeholder="John Doe")
-        # has_attachments = st.checkbox("Email has attachments")
+    subject = st.text_input("Email Subject", placeholder="Enter email subject")
+    sender_email = ''
     
     email_body = st.text_area(
         "Email Body",
@@ -202,7 +197,7 @@ Security Team"""
                     st.error(f"Email prediction failed ({err}).")
                     st.stop()
                 
-            _render_email_result(is_spam, displayed_label, email_body, subject, sender_email)
+                _render_email_result(is_spam, displayed_label, email_body, subject, sender_email)
 
 with tab2:
     st.markdown("### Upload Email File")
@@ -384,13 +379,13 @@ with tab3:
 
 
 # Sidebar info
-with st.sidebar:
-    st.markdown("### Common Phishing Signs")
-    st.markdown("""
-    - Spelling and grammar errors
-    - Urgent or threatening language
-    - Requests for personal information
-    - Suspicious links or attachments
-    - Mismatched sender addresses
-    - Too-good-to-be-true offers
-    """)
+# with st.sidebar:
+#     st.markdown("### Common Phishing Signs")
+#     st.markdown("""
+#     - Spelling and grammar errors
+#     - Urgent or threatening language
+#     - Requests for personal information
+#     - Suspicious links or attachments
+#     - Mismatched sender addresses
+#     - Too-good-to-be-true offers
+#     """)

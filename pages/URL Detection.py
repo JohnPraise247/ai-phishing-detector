@@ -13,6 +13,7 @@ st.set_page_config(
     page_title="URL Detection", 
     page_icon="URL", 
     layout="centered",
+    initial_sidebar_state="auto",
     menu_items={
         'About': "This application uses AI to detect phishing emails and URLs."
     })
@@ -53,7 +54,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("URL Phishing Detection")
-st.markdown("Check if a website is safe to visit using our AI-powered URL analyzer.")
+st.markdown("Check if a website is safe to visit using live reputation scoring from the URL service.")
 
 # Main tabs
 tab1, tab2 = st.tabs(["Single URL Check", "Batch URL Analysis"])
@@ -67,7 +68,7 @@ with tab1:
         help="Enter the complete URL including http:// or https://"
     )
     
-    col1, col2, col3 = st.columns([2, 1, 1])
+    col1, col2, col3 = st.columns([1, 1, 2])
     
     with col1:
         check_btn = st.button("Check URL", type="primary", use_container_width=True)
@@ -382,14 +383,14 @@ with tab2:
             )
 
 # Sidebar
-with st.sidebar:
-    st.markdown("### Common URL Phishing Signs")
-    st.markdown("""
-    - Using HTTP instead of HTTPS
-    - Misspelled domain names
-    - Excessive subdomains
-    - Suspicious TLDs (.tk, .ml, .ga)
-    - URLs with @ symbols
-    - Shortened/obfuscated URLs
-    - URLs with IP addresses
-    """)
+# with st.sidebar:
+#     st.markdown("### Common URL Phishing Signs")
+#     st.markdown("""
+#     - Using HTTP instead of HTTPS
+#     - Misspelled domain names
+#     - Excessive subdomains
+#     - Suspicious TLDs (.tk, .ml, .ga)
+#     - URLs with @ symbols
+#     - Shortened/obfuscated URLs
+#     - URLs with IP addresses
+#     """)

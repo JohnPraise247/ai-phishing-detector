@@ -1,18 +1,10 @@
 [theme]
 base = "dark"
-#primaryColor = "#007bfc"
+primaryColor = "#00fc3fff"
 backgroundColor = "#0c0c0c"
 secondaryBackgroundColor = "#141414"
 #textColor = "#e6debe"
 showSidebarBorder=true
-#font = "Inter"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter&display=swap"
 #baseFontWeight = 300
-#headingFontWeights = 300
-
-#[theme.sidebar]
-#headingFontWeights = "300"
-#font = "sans-serif" 
-#headingFont = "sans-serif"
-#fontSize="9px"
-#fontWeight="900"
-#baseFontWeight = "light"
+headingFontWeights = 400
