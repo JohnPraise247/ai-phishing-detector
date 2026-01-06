@@ -22,23 +22,17 @@ st.markdown("""
     <style>
     .url-safe {
         background: linear-gradient(135deg, #00C851 0%, #007E33 100%);
-        color: white;
         padding: 2rem;
+        margin-bottom: 10px;
         border-radius: 15px;
         text-align: center;
-        font-size: 1.8rem;
-        font-weight: bold;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .url-phishing {
-        background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
-        color: white;
+        background: #cc0000;/*#ff4444;*/
         padding: 2rem;
         border-radius: 15px;
+        margin-bottom: 10px;
         text-align: center;
-        font-size: 1.8rem;
-        font-weight: bold;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         animation: shake 0.5s;
     }
     @keyframes shake {
@@ -47,11 +41,10 @@ st.markdown("""
         75% { transform: translateX(10px); }
     }
     .feature-card {
-        background: #f8f9fa;
+        background: #141414;
         padding: 1rem;
         border-radius: 8px;
         margin: 0.5rem 0;
-        border-left: 3px solid #667eea;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -63,7 +56,7 @@ st.markdown("Check if a website is safe to visit using our AI-powered URL analyz
 tab1, tab2 = st.tabs(["Single URL Check", "Batch URL Analysis"])
 
 with tab1:
-    st.markdown("### Enter URL to Analyze")
+    st.markdown("#### Enter URL to Analyze")
     
     url_input = st.text_input(
         "Website URL",
@@ -87,7 +80,7 @@ with tab1:
                 st.warning("URL should start with http:// or https://")
                 url_input = 'https://' + url_input
             
-            with st.spinner("Analyzing URL... Checking security features..."):
+            with st.spinner("Analyzing URL..."):
                 time.sleep(2)
                 
                 # Parse URL
@@ -108,26 +101,26 @@ with tab1:
                 confidence = 0.89 if is_phishing else 0.94
             
             st.markdown("---")
-            st.markdown("## URL Analysis Results")
+            st.markdown("#### URL Analysis Results")
             
             # Main result
             if is_phishing:
                 st.markdown("""
-                    <div class="url-phishing">
-                        DANGEROUS WEBSITE DETECTED
-                    </div>
+                    <h4 class="url-phishing">
+                        Dangerous Website Detected
+                    </h4>
                 """, unsafe_allow_html=True)
-                st.error("This URL shows multiple phishing indicators. DO NOT VISIT!")
+                st.error("This URL shows multiple phishing indicators. Do not visit!")
             else:
                 st.markdown("""
-                    <div class="url-safe">
-                        URL APPEARS SAFE
-                    </div>
+                    <h4 class="url-safe">
+                        URL Appears Safe
+                    </h4>
                 """, unsafe_allow_html=True)
                 st.success("This website appears to be legitimate and safe to visit.")
             
             # Confidence meter
-            st.markdown("### Confidence Score")
+            st.markdown("#### Confidence Score")
             confidence_col1, confidence_col2 = st.columns([3, 1])
             with confidence_col1:
                 st.progress(confidence)
@@ -135,12 +128,12 @@ with tab1:
                 st.metric("Confidence", f"{confidence * 100:.1f}%")
             
             # URL breakdown
-            st.markdown("### URL Component Analysis")
+            st.markdown("#### URL Component Analysis")
             
             col1, col2 = st.columns(2)
             
             with col1:
-                st.markdown("#### URL Components")
+                st.markdown("##### URL Components")
                 components = pd.DataFrame({
                     'Component': ['Protocol', 'Domain', 'Path', 'Full URL'],
                     'Value': [
@@ -153,7 +146,7 @@ with tab1:
                 st.dataframe(components, use_container_width=True, hide_index=True)
                 
                 # Security features
-                st.markdown("#### Security Features")
+                st.markdown("##### Security Features")
                 security_features = []
                 
                 if parsed.scheme == 'https':
@@ -176,7 +169,7 @@ with tab1:
                     st.markdown(f"<div class='feature-card'>{feature}</div>", unsafe_allow_html=True)
             
             with col2:
-                st.markdown("#### Risk Indicators")
+                st.markdown("##### Risk Indicators")
                 
                 risk_indicators = []
                 risk_score = 0
@@ -218,7 +211,7 @@ with tab1:
                     st.progress(0.0)
             
             # URL Features Summary
-            st.markdown("### Feature Analysis Summary")
+            st.markdown("#### Feature Analysis Summary")
             
             feature_col1, feature_col2, feature_col3, feature_col4 = st.columns(4)
             
@@ -232,14 +225,14 @@ with tab1:
                 st.metric("Special Chars", url_input.count('-') + url_input.count('_'))
             
             # Recommendations
-            st.markdown("### Recommendations")
+            st.markdown("#### Recommendations")
             
             if is_phishing:
                 st.error("""
-                **SECURITY WARNING:**
-                - DO NOT visit this website
-                - DO NOT enter any personal information
-                - DO NOT download anything from this site
+                **Security Warning:**
+                - Do not visit this website
+                - Do not enter any personal information
+                - Do not download anything from this site
                 - Report this URL to your security team
                 - Run a security scan if you visited this site
                 """)
