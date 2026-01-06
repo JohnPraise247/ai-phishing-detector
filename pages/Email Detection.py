@@ -339,7 +339,7 @@ with tab3:
                     results.append({
                         'Subject': subject if subject else 'No subject',
                         'Label': 'Missing body',
-                        'Confidence': '0.0%',
+                        # 'Confidence': '0.0%',
                         'Spam': 'Unknown'
                     })
                     continue
@@ -362,7 +362,7 @@ with tab3:
                 results.append({
                     'Subject': subject if subject else 'No subject',
                     'Label': label_display,
-                    'Confidence': f"{confidence * 100:.1f}%",
+                    # 'Confidence': f"{confidence * 100:.1f}%",
                     'Spam': 'Yes' if label_display == 'Spam' else 'No'
                 })
 

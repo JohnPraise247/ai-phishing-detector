@@ -2,3 +2,6 @@ scikit-learn
 joblib
 gdown
 streamlit
+requests>=2.32.0
+protobuf>=6.0.0
+googleapis-common-protos>=1.72.0

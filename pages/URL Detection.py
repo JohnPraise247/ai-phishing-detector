@@ -84,28 +84,19 @@ with tab1:
                 time.sleep(2)
                 parsed = urlparse(url_input)
                 domain = parsed.netloc
-                
-                # TODO: Replace with actual model prediction
-                # result = predict_url(url_input)
-                # is_phishing = result['is_phishing']
-                # confidence = result['confidence']
-                
-                displayed_label = 'Unknown'
+
                 try:
                     result = predict_url(url_input)
-                    model_label = result.get('label', '').lower()
+                    model_label = result.get('label', 'benign').lower()
                     confidence = float(result.get('confidence', 0.0))
-                    is_phishing = model_label in ('phishing', 'malware', 'defacement')
-                    displayed_label = model_label.capitalize() if model_label else 'Unknown'
-                except FileNotFoundError as err:
-                    logging.exception("Model file missing")
-                    st.error("URL model not found. Please ensure the model is downloaded and configured.")
+                except Exception:
+                    logging.exception("URL prediction failed")
+                    st.error("URL prediction failed. Please try again shortly.")
                     st.stop()
-                except Exception as err:
-                    logging.exception("Model prediction error")
-                    st.error(f"Model prediction failed: {err}.")
-                    st.stop()
-            
+
+            is_phishing = model_label != 'benign'
+            displayed_label = model_label.replace('_', ' ').title()
+
             st.markdown("---")
             st.markdown("#### URL Analysis Results")
             
@@ -134,12 +125,12 @@ with tab1:
                     pass
             
             # Confidence meter
-            st.markdown("#### Confidence Score")
-            confidence_col1, confidence_col2 = st.columns([3, 1])
-            with confidence_col1:
-                st.progress(confidence)
-            with confidence_col2:
-                st.metric("Confidence", f"{confidence * 100:.1f}%")
+            # st.markdown("#### Confidence Score")
+            # confidence_col1, confidence_col2 = st.columns([3, 1])
+            # with confidence_col1:
+            #     st.progress(confidence)
+            # with confidence_col2:
+            #     st.metric("Confidence", f"{confidence * 100:.1f}%")
             
             # URL breakdown
             st.markdown("#### URL Component Analysis")
@@ -273,7 +264,7 @@ with tab1:
                     "subdomain_count": len(domain.split('.')) - 1,
                     "url_length": len(url_input),
                     "prediction": "Phishing" if is_phishing else "Safe",
-                    "confidence": f"{confidence * 100:.2f}%"
+                    # "confidence": f"{confidence * 100:.2f}%"
                 })
 
 with tab2:
@@ -318,34 +309,59 @@ with tab2:
             status_text = st.empty()
             
             results = []
+            errors = []
             
             for i, url in enumerate(urls_to_check):
                 progress_bar.progress((i + 1) / len(urls_to_check))
                 status_text.text(f"Analyzing URL {i + 1} of {len(urls_to_check)}...")
                 
-                # Simulate analysis
-                time.sleep(0.1)
-                
-                # Demo prediction
-                is_phishing = 'verify' in url.lower() or 'login' in url.lower()
+                if not url.startswith(('http://', 'https://')):
+                    errors.append(f"Skipping invalid URL: {url}")
+                    results.append({
+                        'URL': url,
+                        'Status': 'Invalid',
+                        'Confidence': '0.0%',
+                        'Risk Level': 'Unknown'
+                    })
+                    continue
+
+                try:
+                    prediction = predict_url(url)
+                    label = prediction.get('label', 'benign').lower()
+                    confidence = float(prediction.get('confidence', 0.0))
+                except Exception:
+                    logging.exception("Batch URL prediction failed")
+                    errors.append(f"Failed to classify {url}")
+                    label = 'unknown'
+                    confidence = 0.0
+
+                is_phishing = label != 'benign'
+                status = 'Phishing' if is_phishing else 'Safe'
+                if label == 'unknown':
+                    status = 'Error'
                 
                 results.append({
                     'URL': url[:50] + '...' if len(url) > 50 else url,
-                    'Status': 'Phishing' if is_phishing else 'Safe',
-                    'Confidence': f"{(0.85 if is_phishing else 0.93):.2%}",
+                    'Status': status,
+                    'Prediction Label': label.replace('_', ' ').title(),
+                    # 'Confidence': f"{confidence * 100:.1f}%",
                     'Risk Level': 'High' if is_phishing else 'Low'
                 })
-            
+
             st.success(f"Analysis complete! Processed {len(urls_to_check)} URLs")
-            
-            # Display results
+
+            if errors:
+                with st.expander("Issues encountered"):
+                    for err in errors:
+                        st.warning(err)
+
             results_df = pd.DataFrame(results)
             st.dataframe(results_df, use_container_width=True, hide_index=True)
-            
-            # Summary statistics
-            phishing_count = sum(1 for r in results if 'Phishing' in r['Status'])
-            safe_count = len(results) - phishing_count
-            
+
+            phishing_count = sum(1 for r in results if r['Status'] == 'Phishing')
+            safe_count = sum(1 for r in results if r['Status'] == 'Safe')
+            error_count = len(results) - phishing_count - safe_count
+
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Total URLs", len(results))
@@ -353,8 +369,10 @@ with tab2:
                 st.metric("Phishing Detected", phishing_count)
             with col3:
                 st.metric("Safe URLs", safe_count)
-            
-            # Download results
+
+            if error_count:
+                st.caption(f"{error_count} entries failed to predict")
+
             csv = results_df.to_csv(index=False)
             st.download_button(
                 label="Download Results (CSV)",

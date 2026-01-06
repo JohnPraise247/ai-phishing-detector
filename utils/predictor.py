@@ -1,10 +1,15 @@
 import os
 import logging
 from typing import Dict, Optional, Sequence
+from urllib.parse import urlparse
+
 import joblib
 import streamlit as st
 import gdown
-from urllib.parse import urlparse
+import requests
+from google.protobuf.message import DecodeError
+
+from utils.google.security.safebrowsing.v5alpha1 import safebrowsing_pb2
 
 # Cache loaded models
 _MODEL_CACHE: Dict[str, object] = {}
@@ -130,13 +135,70 @@ def _url_feature_vector(url_input: str, keywords: Sequence[str] = ('verify', 'ac
     ]
 
 
-def predict_url(url_input: str, model_path="models/url_model.joblib"):
-    """Predict a single URL with the cached URL model."""
-    # Use your secret MODEL_URL
-    model_url = _env_model_url("URL_MODEL_URL", "MODEL_URL")
-    model = load_model(model_path, model_url)
-    features = _url_feature_vector(url_input)
-    return _model_predict(model, [features])
+def _safe_browsing_lookup(url_input: str, api_key: str) -> Dict[str, str]:
+    endpoint = "https://safebrowsing.googleapis.com/v5alpha1/urls:search"
+    params = {
+        "key": api_key,
+        "urls": url_input
+    }
+    headers = {"Accept": "application/x-protobuf"}
+
+    response = requests.get(endpoint, params=params, headers=headers, timeout=10)
+    response.raise_for_status()
+
+    payload = response.content
+    if not payload:
+        raise RuntimeError("Safe Browsing response was empty")
+
+    search_response = safebrowsing_pb2.SearchHashesResponse()
+    try:
+        search_response.ParseFromString(payload)
+    except DecodeError as exc:
+        logging.exception("Safe Browsing protobuf parse failed")
+        raise RuntimeError("Safe Browsing response could not be decoded") from exc
+
+    if not search_response.full_hashes:
+        return {"label": "benign", "confidence": 0.89}
+
+    full_hash = search_response.full_hashes[0]
+    label, confidence = _interpret_safebrowsing_match(full_hash)
+    return {"label": label, "confidence": confidence}
+
+
+def _interpret_safebrowsing_match(full_hash) -> tuple[str, float]:
+    detail = None
+    if full_hash.full_hash_details:
+        detail = full_hash.full_hash_details[0]
+
+    if not detail:
+        return "suspicious", 0.92
+
+    try:
+        threat_name = safebrowsing_pb2.ThreatType.Name(detail.threat_type)
+    except ValueError:
+        threat_name = "THREAT_TYPE_UNSPECIFIED"
+
+    label = threat_name.lower()
+    confidence_map = {
+        safebrowsing_pb2.ThreatType.MALWARE: 0.98,
+        safebrowsing_pb2.ThreatType.SOCIAL_ENGINEERING: 0.95,
+        safebrowsing_pb2.ThreatType.UNWANTED_SOFTWARE: 0.94,
+        safebrowsing_pb2.ThreatType.POTENTIALLY_HARMFUL_APPLICATION: 0.92,
+    }
+    confidence = confidence_map.get(detail.threat_type, 0.9)
+    return label, confidence
+
+
+def predict_url(url_input: str, model_path=None):
+    """Use Google Safe Browsing to classify a single URL."""
+    api_key = _env_model_url("SAFE_BROWSING_API_KEY", "SAFE_BROWSING_API_KEY")
+    if not api_key:
+        raise RuntimeError("SAFE_BROWSING_API_KEY is required for URL predictions.")
+    try:
+        return _safe_browsing_lookup(url_input, api_key)
+    except requests.RequestException as exc:
+        logging.exception("Safe Browsing lookup failed")
+        raise RuntimeError(f"Model prediction failed: {exc}")
 
 def predict_email(subject: str, body: str, model_path="models/email_model.joblib"):
     """Predict email content using the cached email model (subject+body only)."""
