@@ -293,6 +293,10 @@ st.markdown("""
         text-align: center;
         animation: shake 0.5s;
     }
+    .url-phishing.warn {
+        background: #cc5400;
+        color: black;
+    }
     @keyframes shake {
         0%, 100% { transform: translateX(0); }
         25% { transform: translateX(-10px); }
@@ -445,7 +449,7 @@ with tab1:
                     st.error("This URL shows multiple phishing indicators. Do not visit!")
                 elif status_label == "Suspicious":
                     st.markdown("""
-                        <h4 class="url-phishing">
+                        <h4 class="url-phishing warn">
                             Suspicious Activity Detected
                         </h4>
                     """, unsafe_allow_html=True)
