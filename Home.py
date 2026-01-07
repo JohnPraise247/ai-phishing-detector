@@ -10,7 +10,7 @@ st.set_page_config(
     layout="centered",
     initial_sidebar_state="auto",
     menu_items={
-        'About': "This application uses AI to detect phishing emails and URLs."
+        'About': "AI-based phishing detection system using machine learning for email classification and multi-layered URL threat analysis with 15+ security checks."
     }
 )
 
