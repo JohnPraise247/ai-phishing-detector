@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import time
 import re
+from difflib import SequenceMatcher
 from urllib.parse import urlparse
 
 import logging
@@ -16,6 +17,110 @@ def _normalize_host(raw_input: str) -> str:
 
 def _normalize_host_input():
     st.session_state["website_url"] = _normalize_host(st.session_state.get("website_url", ""))
+
+def _has_valid_domain(netloc: str) -> bool:
+    host = netloc.split(':')[0].strip().lower()
+    if not host:
+        return False
+    if host in {'localhost', '127.0.0.1'}:
+        return True
+    if re.match(r'^(\d{1,3}\.){3}\d{1,3}$', host):
+        return True
+    if '.' not in host:
+        return False
+    parts = [part for part in host.split('.') if part]
+    if len(parts) < 2:
+        return False
+    return all(re.match(r'^[a-zA-Z0-9-]+$', part) for part in parts)
+
+KNOWN_BRANDS = [
+    "google",
+    "facebook",
+    "microsoft",
+    "apple",
+    "amazon",
+    "netflix",
+    "twitter",
+    "paypal",
+    "linkedin",
+    "dropbox",
+    "github",
+    "spotify",
+    "adobe",
+    "ebay",
+    "airbnb",
+    "uber",
+    "slack",
+]
+
+
+def _detect_typosquatting(netloc: str) -> tuple[str | None, float | None]:
+    host = netloc.split(':')[0].lower()
+    primary_label = host.split('.')[-2] if len(host.split('.')) > 1 else host
+    best_brand = None
+    best_ratio = 0.0
+
+    for brand in KNOWN_BRANDS:
+        ratio = SequenceMatcher(None, primary_label, brand).ratio()
+        if ratio > best_ratio:
+            best_ratio = ratio
+            best_brand = brand
+
+    if best_brand and best_ratio >= 0.8 and primary_label != best_brand:
+        return best_brand, best_ratio
+    return None, None
+
+
+def _compute_risk_indicators(parsed, url_input):
+    risk_indicators = []
+    risk_score = 0
+    host = parsed.netloc.split(':')[0].lower()
+    is_ip = bool(re.match(r'^(\d{1,3}\.){3}\d{1,3}$', host))
+
+    if parsed.scheme == 'http':
+        risk_indicators.append("No SSL/TLS encryption")
+        risk_score += 30
+
+    suspicious_keywords = ['verify', 'account', 'login', 'secure', 'update', 'confirm']
+    if any(keyword in url_input.lower() for keyword in suspicious_keywords):
+        risk_indicators.append("Suspicious keywords in URL")
+        risk_score += 25
+
+    if len(parsed.path) > 50:
+        risk_indicators.append("Unusually long URL path")
+        risk_score += 15
+
+    if not is_ip and parsed.netloc.count('.') > 2:
+        risk_indicators.append("Multiple subdomains")
+        risk_score += 20
+
+    if '@' in url_input:
+        risk_indicators.append("Contains @ symbol (phishing technique)")
+        risk_score += 35
+
+    if len(parsed.netloc) > 30:
+        risk_indicators.append("Unusually long domain name")
+        risk_score += 10
+
+    brand, similarity = _detect_typosquatting(parsed.netloc)
+    if brand:
+        risk_indicators.append(
+            f"Typosquatting candidate: similar to {brand.title()} ({similarity:.2f} similarity)"
+        )
+        risk_score += 30
+
+    return risk_indicators, risk_score
+
+def _derive_status(model_label: str, reachability: dict, risk_score: int, redirect_count: int) -> tuple[str, str]:
+    if not reachability.get('reachable'):
+        return "Suspicious", "Host is unreachable and could be down, so we cannot confirm it as safe."
+    if model_label != 'benign':
+        return "Not Safe", "Safe Browsing reported this URL as a confirmed threat."
+    if redirect_count >= 3 or reachability.get('redirect_count', 0) >= 3:
+        return "Suspicious", f"Redirect chain includes {redirect_count} hops, which can hide malicious targets."
+    if risk_score >= 40:
+        return "Suspicious", f"Risk score {risk_score}/100 indicates suspicious characteristics."
+    return "Safe", "This URL presents no obvious threats and passed the reachability check."
 
 st.set_page_config(
     page_title="URL Detection", 
@@ -57,6 +162,9 @@ st.markdown("""
         padding: 1rem;
         border-radius: 8px;
         margin: 0.5rem 0;
+    }
+    .feature-card.warn {
+        background: #3d3d0e;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -128,13 +236,16 @@ with tab1:
         elif not url_input.startswith(('http://', 'https://')):
             st.warning("URL should start with http:// or https://")
         else:
+            parsed = urlparse(url_input)
+            domain = parsed.netloc
+            if not _has_valid_domain(domain):
+                st.error("Enter a host that includes a full domain (e.g., example.com) or IP address.")
+                st.stop()
+
             spinner = st.spinner("Analyzing URL...")
             spinner.__enter__()
             spinner_active = True
             try:
-                parsed = urlparse(url_input)
-                domain = parsed.netloc
-
                 reachability = probe_url(url_input)
                 if not reachability.get('reachable'):
                     spinner.__exit__(None, None, None)
@@ -154,9 +265,15 @@ with tab1:
                     logging.exception("URL prediction failed")
                     st.error("URL prediction failed. Please try again shortly.")
                     st.stop()
+                risk_indicators, risk_score = _compute_risk_indicators(parsed, url_input)
+                redirect_count = reachability.get('redirect_count', 0)
+                status_label, status_reason = _derive_status(
+                    model_label, reachability, risk_score, redirect_count
+                )
             finally:
                 if spinner_active:
                     spinner.__exit__(None, None, None)
+
 
             is_phishing = model_label != 'benign'
             displayed_label = model_label.replace('_', ' ').title()
@@ -165,26 +282,33 @@ with tab1:
             st.markdown("#### URL Analysis Results")
             
             # Main result
-            if is_phishing:
-                st.markdown("""
-                    <h4 class="url-phishing">
-                        Dangerous Website Detected
-                    </h4>
-                """, unsafe_allow_html=True)
-                st.error("This URL shows multiple phishing indicators. Do not visit!")
+            result_col, prediction_col = st.columns([3, 1])
+            with result_col:
+                if status_label == "Not Safe":
+                    st.markdown("""
+                        <h4 class="url-phishing">
+                            Dangerous Website Detected
+                        </h4>
+                    """, unsafe_allow_html=True)
+                    st.error("This URL shows multiple phishing indicators. Do not visit!")
+                elif status_label == "Suspicious":
+                    st.markdown("""
+                        <h4 class="url-phishing">
+                            Suspicious Activity Detected
+                        </h4>
+                    """, unsafe_allow_html=True)
+                    st.warning("There are signals that warrant further verification before trusting this site.")
+                else:
+                    st.markdown("""
+                        <h4 class="url-safe">
+                            URL Appears Safe
+                        </h4>
+                    """, unsafe_allow_html=True)
+                    st.success("This website appears to be legitimate and safe to visit.")
+                st.caption(status_reason)
+            with prediction_col:
                 try:
-                    st.info(f"Prediction: {displayed_label}")
-                except Exception:
-                    pass
-            else:
-                st.markdown("""
-                    <h4 class="url-safe">
-                        URL Appears Safe
-                    </h4>
-                """, unsafe_allow_html=True)
-                st.success("This website appears to be legitimate and safe to visit.")
-                try:
-                    st.info(f"Prediction: {displayed_label}")
+                    st.info(f"{displayed_label}")
                 except Exception:
                     pass
             
@@ -239,47 +363,16 @@ with tab1:
             
             with col2:
                 st.markdown("##### Risk Indicators")
-                
-                risk_indicators = []
-                risk_score = 0
-                
-                # Check for suspicious patterns
-                if parsed.scheme == 'http':
-                    risk_indicators.append("No SSL/TLS encryption")
-                    risk_score += 30
-                
-                suspicious_keywords = ['verify', 'account', 'login', 'secure', 'update', 'confirm']
-                if any(keyword in url_input.lower() for keyword in suspicious_keywords):
-                    risk_indicators.append("Suspicious keywords in URL")
-                    risk_score += 25
-                
-                if len(parsed.path) > 50:
-                    risk_indicators.append("Unusually long URL path")
-                    risk_score += 15
-                
-                if domain.count('.') > 2:
-                    risk_indicators.append("Multiple subdomains")
-                    risk_score += 20
-                
-                if '@' in url_input:
-                    risk_indicators.append("Contains @ symbol (phishing technique)")
-                    risk_score += 35
-                
-                if len(domain) > 30:
-                    risk_indicators.append("Unusually long domain name")
-                    risk_score += 10
-
                 if risk_indicators:
                     for indicator in risk_indicators:
-                        st.markdown(f"<div class='feature-card'>{indicator}</div>", unsafe_allow_html=True)
-                    
+                        st.markdown(f"<div class='feature-card warn'>{indicator}</div>", unsafe_allow_html=True)
                     st.markdown(f"**Total Risk Score: {risk_score}/100**")
                     st.progress(risk_score / 100)
                 else:
                     st.markdown("<div class='feature-card'>No significant risk indicators found</div>", unsafe_allow_html=True)
                     st.markdown("**Total Risk Score: 0/100**")
                     st.progress(0.0)
-            
+
             # URL Features Summary
             st.markdown("\n#### Feature Analysis Summary", unsafe_allow_html=True)
             
@@ -297,7 +390,7 @@ with tab1:
             # Recommendations
             st.markdown("#### Recommendations")
             
-            if is_phishing:
+            if status_label == "Not Safe":
                 st.error("""
                 **Security Warning:**
                 - Do not visit this website
@@ -305,6 +398,13 @@ with tab1:
                 - Do not download anything from this site
                 - Report this URL to your security team
                 - Run a security scan if you visited this site
+                """)
+            elif status_label == "Suspicious":
+                st.warning("""
+                **Caution:**
+                - Double-check the URL spelling and certificate
+                - Avoid entering credentials until you confirm the destination
+                - Consider running additional scans before proceeding
                 """)
             else:
                 st.info("""
