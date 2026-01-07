@@ -53,15 +53,51 @@ KNOWN_BRANDS = [
     "slack",
 ]
 
+SUSPICIOUS_TLDS = {
+    ".tk", ".ml", ".ga", ".cf", ".gq", ".xyz", ".top", ".pw",
+    ".cc", ".su", ".buzz", ".work", ".click", ".link", ".info",
+}
+
+# Homograph confusables: maps lookalike chars to their ASCII equivalents
+HOMOGRAPH_MAP = {
+    '0': 'o', 'о': 'o', 'ο': 'o',  # Cyrillic/Greek о, digit 0
+    '1': 'l', 'і': 'i', 'ι': 'i', 'l': 'l', '|': 'l',  # digit 1, Cyrillic/Greek i
+    '3': 'e', 'е': 'e', 'ε': 'e',  # digit 3, Cyrillic е
+    '4': 'a', 'а': 'a', 'α': 'a',  # Cyrillic/Greek a
+    '5': 's', 'ѕ': 's',  # Cyrillic s
+    '8': 'b',
+    '@': 'a',
+    '$': 's',
+    'ç': 'c', 'с': 'c',  # Cyrillic с
+    'ń': 'n', 'п': 'n',
+    'ú': 'u', 'υ': 'u', 'ц': 'u',
+    'ý': 'y', 'у': 'y',
+    'х': 'x',
+    'р': 'p',  # Cyrillic р
+    'ω': 'w',
+    'ν': 'v',
+    'κ': 'k', 'к': 'k',
+    'τ': 't', 'т': 't',
+    'м': 'm',
+}
+
+
+def _normalize_homoglyphs(text: str) -> str:
+    return ''.join(HOMOGRAPH_MAP.get(ch, ch) for ch in text.lower())
+
 
 def _detect_typosquatting(netloc: str) -> tuple[str | None, float | None]:
     host = netloc.split(':')[0].lower()
     primary_label = host.split('.')[-2] if len(host.split('.')) > 1 else host
+    normalized_label = _normalize_homoglyphs(primary_label)
     best_brand = None
     best_ratio = 0.0
 
     for brand in KNOWN_BRANDS:
-        ratio = SequenceMatcher(None, primary_label, brand).ratio()
+        # Compare both raw and homoglyph-normalized versions
+        ratio_raw = SequenceMatcher(None, primary_label, brand).ratio()
+        ratio_normalized = SequenceMatcher(None, normalized_label, brand).ratio()
+        ratio = max(ratio_raw, ratio_normalized)
         if ratio > best_ratio:
             best_ratio = ratio
             best_brand = brand
@@ -69,6 +105,40 @@ def _detect_typosquatting(netloc: str) -> tuple[str | None, float | None]:
     if best_brand and best_ratio >= 0.8 and primary_label != best_brand:
         return best_brand, best_ratio
     return None, None
+
+
+def _detect_homograph_attack(netloc: str) -> bool:
+    host = netloc.split(':')[0]
+    # Check for non-ASCII characters (potential homograph/IDN attack)
+    try:
+        host.encode('ascii')
+        return False
+    except UnicodeEncodeError:
+        return True
+
+
+def _check_suspicious_tld(netloc: str) -> str | None:
+    host = netloc.split(':')[0].lower()
+    for tld in SUSPICIOUS_TLDS:
+        if host.endswith(tld):
+            return tld
+    return None
+
+
+def _check_excessive_dashes_numbers(netloc: str) -> tuple[bool, bool]:
+    host = netloc.split(':')[0].lower()
+    # Remove TLD for analysis
+    parts = host.rsplit('.', 1)
+    domain_part = parts[0] if parts else host
+
+    dash_count = domain_part.count('-')
+    digit_count = sum(1 for c in domain_part if c.isdigit())
+    alpha_count = sum(1 for c in domain_part if c.isalpha())
+
+    excessive_dashes = dash_count >= 3
+    excessive_numbers = alpha_count > 0 and digit_count / max(alpha_count, 1) > 0.5
+
+    return excessive_dashes, excessive_numbers
 
 
 def _compute_risk_indicators(parsed, url_input):
@@ -102,6 +172,28 @@ def _compute_risk_indicators(parsed, url_input):
         risk_indicators.append("Unusually long domain name")
         risk_score += 10
 
+    # Suspicious TLD check
+    suspicious_tld = _check_suspicious_tld(parsed.netloc)
+    if suspicious_tld:
+        risk_indicators.append(f"Suspicious TLD: {suspicious_tld}")
+        risk_score += 25
+
+    # Homograph/IDN attack check
+    if not is_ip and _detect_homograph_attack(parsed.netloc):
+        risk_indicators.append("Homograph attack: contains non-ASCII lookalike characters")
+        risk_score += 40
+
+    # Excessive dashes/numbers check
+    if not is_ip:
+        excessive_dashes, excessive_numbers = _check_excessive_dashes_numbers(parsed.netloc)
+        if excessive_dashes:
+            risk_indicators.append("Excessive dashes in domain name")
+            risk_score += 15
+        if excessive_numbers:
+            risk_indicators.append("Excessive numbers in domain name")
+            risk_score += 15
+
+    # Typosquatting / brand impersonation check
     brand, similarity = _detect_typosquatting(parsed.netloc)
     if brand:
         risk_indicators.append(
@@ -165,6 +257,17 @@ st.markdown("""
     }
     .feature-card.warn {
         background: #3d3d0e;
+    }
+    .risk-progress {
+        background: #1f1f1f;
+        border-radius: 6px;
+        overflow: hidden;
+        height: 7px;
+    }
+    .risk-progress > div {
+        height: 100%;
+        background: linear-gradient(135deg, #ffb347 0%, #ffcc33 100%)!important;
+        border-radius: 6px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -321,19 +424,25 @@ with tab1:
             #     st.metric("Confidence", f"{confidence * 100:.1f}%")
             
             # URL breakdown
+            st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("#### URL Component Analysis")
             
             col1, col2 = st.columns(2)
             
             with col1:
                 st.markdown("##### URL Components")
+                final_destination = reachability.get('final_url')
+                final_destination_value = (
+                    final_destination if final_destination and final_destination != url_input else "Same as requested"
+                )
                 components = pd.DataFrame({
-                    'Component': ['Protocol', 'Domain', 'Path', 'Full URL'],
+                    'Component': ['Protocol', 'Domain', 'Path', 'Full URL', 'Final Destination'],
                     'Value': [
                         parsed.scheme,
                         domain,
                         parsed.path if parsed.path else '/',
-                        url_input[:50] + '...' if len(url_input) > 50 else url_input
+                        url_input[:50] + '...' if len(url_input) > 50 else url_input,
+                        final_destination_value
                     ]
                 })
                 st.dataframe(components, use_container_width=True, hide_index=True)
@@ -367,14 +476,22 @@ with tab1:
                     for indicator in risk_indicators:
                         st.markdown(f"<div class='feature-card warn'>{indicator}</div>", unsafe_allow_html=True)
                     st.markdown(f"**Total Risk Score: {risk_score}/100**")
-                    st.progress(risk_score / 100)
+                    pct = max(0, min(risk_score, 100))
+                    st.markdown(
+                        f"<div class='risk-progress'><div style='width: {pct}%;'></div></div>",
+                        unsafe_allow_html=True,
+                    )
                 else:
                     st.markdown("<div class='feature-card'>No significant risk indicators found</div>", unsafe_allow_html=True)
                     st.markdown("**Total Risk Score: 0/100**")
-                    st.progress(0.0)
+                    st.markdown(
+                        "<div class='risk-progress'><div style='width: 0%;'></div></div>",
+                        unsafe_allow_html=True,
+                    )
 
             # URL Features Summary
-            st.markdown("\n#### Feature Analysis Summary", unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("#### Feature Analysis Summary", unsafe_allow_html=True)
             
             feature_col1, feature_col2, feature_col3, feature_col4 = st.columns(4)
             
