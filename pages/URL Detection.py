@@ -253,12 +253,29 @@ def _compute_risk_indicators(parsed, url_input):
     return risk_indicators, risk_score
 
 def _derive_status(model_label: str, reachability: dict, risk_score: int, redirect_count: int) -> tuple[str, str]:
+    # Determine final host (if available) so we can apply whitelisting
+    final_url = reachability.get('final_url') or ''
+    final_host = ''
+    try:
+        final_host = urlparse(final_url).netloc.split(':')[0].lower() if final_url else ''
+    except Exception:
+        final_host = ''
+
+    # Whitelist suffixes (hosts under these suffixes will not be auto-flagged
+    # solely because of redirect chains). Add other trusted hosting providers
+    # here as needed.
+    WHITELIST_SUFFIXES = ('streamlit.app',)
+    whitelisted = any(final_host.endswith(suffix) for suffix in WHITELIST_SUFFIXES if final_host)
+
     if not reachability.get('reachable'):
         return "Suspicious", "Host is unreachable and could be down, so we cannot confirm it as safe."
     if model_label != 'benign':
         return "Not Safe", "Safe Browsing reported this URL as a confirmed threat."
-    if redirect_count >= 3 or reachability.get('redirect_count', 0) >= 3:
+
+    # Only treat redirect chains as suspicious for non-whitelisted hosts
+    if not whitelisted and (redirect_count >= 3 or reachability.get('redirect_count', 0) >= 3):
         return "Suspicious", f"Redirect chain includes {redirect_count} hops, which can hide malicious targets."
+
     if risk_score >= 40:
         return "Suspicious", f"Risk score {risk_score}/100 indicates suspicious characteristics."
     return "Safe", "This URL presents no obvious threats and passed the reachability check."
