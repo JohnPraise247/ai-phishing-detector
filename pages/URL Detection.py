@@ -252,7 +252,7 @@ def _compute_risk_indicators(parsed, url_input):
 
     return risk_indicators, risk_score
 
-def _derive_status(model_label: str, reachability: dict, risk_score: int, redirect_count: int) -> tuple[str, str]:
+def _derive_status(model_label: str, reachability: dict, risk_score: int, redirect_count: int, use_model: bool = False) -> tuple[str, str]:
     # Determine final host (if available) so we can apply whitelisting
     final_url = reachability.get('final_url') or ''
     final_host = ''
@@ -270,7 +270,11 @@ def _derive_status(model_label: str, reachability: dict, risk_score: int, redire
     if not reachability.get('reachable'):
         return "Suspicious", "Host is unreachable and could be down, so we cannot confirm it as safe."
     if model_label != 'benign':
-        return "Not Safe", "Safe Browsing reported this URL as a confirmed threat."
+        # Only show Safe Browsing message when not in model mode
+        if use_model:
+            return "Not Safe", "The ML model detected this URL as a potential threat."
+        else:
+            return "Not Safe", "Safe Browsing reported this URL as a confirmed threat."
 
     # Only treat redirect chains as suspicious for non-whitelisted hosts
     if not whitelisted and (redirect_count >= 3 or reachability.get('redirect_count', 0) >= 3):
@@ -450,7 +454,7 @@ with tab1:
                 risk_indicators, risk_score = _compute_risk_indicators(parsed, url_input)
                 redirect_count = reachability.get('redirect_count', 0)
                 status_label, status_reason = _derive_status(
-                    model_label, reachability, risk_score, redirect_count
+                    model_label, reachability, risk_score, redirect_count, use_model
                 )
             finally:
                 if spinner_active:
@@ -489,10 +493,12 @@ with tab1:
                     st.success("This website appears to be legitimate and safe to visit.")
                 st.caption(status_reason)
             with prediction_col:
-                try:
-                    st.info(f"{displayed_label}")
-                except Exception:
-                    pass
+                # Only show the prediction label info when using Safe Browsing API mode
+                if not use_model:
+                    try:
+                        st.info(f"{displayed_label}")
+                    except Exception:
+                        pass
             
             # Confidence meter
             # st.markdown("#### Confidence Score")
