@@ -55,9 +55,17 @@ st.markdown("""
 #### About this project
 This system leverages machine learning and advanced pattern analysis to detect phishing threats across emails and URLs. Our multi-layered approach combines:
 - **Email Analysis**: Pretrained ML classifier examines subject lines and body content for phishing patterns
-- **URL Intelligence**: Real-time reputation scoring, reachability probes, and threat database lookups
+- **URL Intelligence**: Real-time reputation scoring, reachability probes, and threat database lookups using both API and ML model
 - **Comprehensive Risk Detection**: 13+ checks including typosquatting, homograph attacks, suspicious TLDs, URL shorteners, non-standard ports, and brand impersonation
 - **Batch Processing**: Analyze multiple emails or URLs simultaneously with detailed reporting
+
+#### URL Detection Modes
+- **API Mode (Safe Browsing)**: Uses Google Safe Browsing API for real-time threat intelligence
+- **Model Mode (ML-based)**: Uses machine learning model to classify URLs into 4 categories:
+  - **Defacement** (Hacked) - Website has been compromised or hacked
+  - **Benign** (Safe) - URL appears safe and legitimate
+  - **Phishing** (Danger) - Potential phishing attempt to steal credentials
+  - **Malware** (Virus) - URL may contain or distribute malware
 
 Every submission receives a risk score, specific threat indicators, and actionable security recommendations.
 """, unsafe_allow_html=True)

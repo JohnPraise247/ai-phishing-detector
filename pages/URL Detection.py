@@ -252,6 +252,16 @@ def _compute_risk_indicators(parsed, url_input):
 
     return risk_indicators, risk_score
 
+def _get_model_label_display(model_label: str) -> str:
+    """Map model labels to user-friendly display names."""
+    label_map = {
+        'defacement': 'Defacement (Hacked)',
+        'benign': 'Benign (Safe)',
+        'phishing': 'Phishing (Danger)',
+        'malware': 'Malware (Virus)'
+    }
+    return label_map.get(model_label.lower(), model_label.replace('_', ' ').title())
+
 def _derive_status(model_label: str, reachability: dict, risk_score: int, redirect_count: int, use_model: bool = False) -> tuple[str, str]:
     # Determine final host (if available) so we can apply whitelisting
     final_url = reachability.get('final_url') or ''
@@ -272,7 +282,8 @@ def _derive_status(model_label: str, reachability: dict, risk_score: int, redire
     if model_label != 'benign':
         # Only show Safe Browsing message when not in model mode
         if use_model:
-            return "Not Safe", "The ML model detected this URL as a potential threat."
+            label_display = _get_model_label_display(model_label)
+            return "Not Safe", f"The ML model detected this URL as: {label_display}"
         else:
             return "Not Safe", "Safe Browsing reported this URL as a confirmed threat."
 
@@ -462,7 +473,7 @@ with tab1:
 
 
             is_phishing = model_label != 'benign'
-            displayed_label = model_label.replace('_', ' ').title()
+            displayed_label = _get_model_label_display(model_label)
 
             st.markdown("---")
             st.markdown("#### URL Analysis Results")
@@ -493,12 +504,11 @@ with tab1:
                     st.success("This website appears to be legitimate and safe to visit.")
                 st.caption(status_reason)
             with prediction_col:
-                # Only show the prediction label info when using Safe Browsing API mode
-                if not use_model:
-                    try:
-                        st.info(f"{displayed_label}")
-                    except Exception:
-                        pass
+                # Show the prediction label for both API and Model modes
+                try:
+                    st.info(f"**{displayed_label}**")
+                except Exception:
+                    pass
             
             # Confidence meter
             # st.markdown("#### Confidence Score")
@@ -717,7 +727,7 @@ with tab2:
                 results.append({
                     'URL': url[:50] + '...' if len(url) > 50 else url,
                     'Status': status,
-                    'Prediction Label': label.replace('_', ' ').title(),
+                    'Prediction Label': _get_model_label_display(label),
                     'Reachability': 'Reachable' if reachable else 'Unreachable',
                     # 'Confidence': f"{confidence * 100:.1f}%",
                     'Risk Level': risk_level
