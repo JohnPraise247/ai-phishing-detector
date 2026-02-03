@@ -258,7 +258,12 @@ def _get_model_label_display(model_label: str) -> str:
         'defacement': 'Defacement (Hacked)',
         'benign': 'Benign (Safe)',
         'phishing': 'Phishing (Danger)',
-        'malware': 'Malware (Virus)'
+        'malware': 'Malware (Virus)',
+        # Fallback for numeric labels (should be converted in predictor.py)
+        '0': 'Benign (Safe)',
+        '1': 'Defacement (Hacked)',
+        '2': 'Phishing (Danger)',
+        '3': 'Malware (Virus)'
     }
     return label_map.get(model_label.lower(), model_label.replace('_', ' ').title())
 
@@ -279,7 +284,11 @@ def _derive_status(model_label: str, reachability: dict, risk_score: int, redire
 
     if not reachability.get('reachable'):
         return "Suspicious", "Host is unreachable and could be down, so we cannot confirm it as safe."
-    if model_label != 'benign':
+    
+    # Check if label indicates safe/benign (handles both semantic and numeric labels)
+    is_benign = model_label in ('benign', '0')
+    
+    if not is_benign:
         # Only show Safe Browsing message when not in model mode
         if use_model:
             label_display = _get_model_label_display(model_label)
@@ -471,8 +480,8 @@ with tab1:
                 if spinner_active:
                     spinner.__exit__(None, None, None)
 
-
-            is_phishing = model_label != 'benign'
+            # Check if label indicates phishing/malicious (handles both semantic and numeric labels)
+            is_phishing = model_label not in ('benign', '0')
             displayed_label = _get_model_label_display(model_label)
 
             st.markdown("---")
@@ -713,7 +722,8 @@ with tab2:
                     confidence = 0.0
                     reachability = {}
 
-                is_phishing = label != 'benign'
+                # Check if label indicates safe/benign (handles both semantic and numeric labels)
+                is_phishing = label not in ('benign', '0')
                 reachable = reachability.get('reachable', True)
                 if not reachable:
                     status = 'Unreachable'
