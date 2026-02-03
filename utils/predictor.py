@@ -381,6 +381,7 @@ def predict_url(url_input: str, model_path=None, reachability: Optional[Dict[str
             raise RuntimeError("MODEL_URL environment variable is required for model-based URL predictions.")
         
         try:
+            # Model is cached by load_model function, so repeated calls won't reload
             model = load_model(model_path, model_url)
             features = _url_feature_vector(url_input)
             result = _model_predict(model, [features])
@@ -399,7 +400,7 @@ def predict_url(url_input: str, model_path=None, reachability: Optional[Dict[str
             sb_result = _safe_browsing_lookup(url_input, api_key)
         except requests.RequestException as exc:
             logging.exception("Safe Browsing lookup failed")
-            raise RuntimeError(f"API prediction failed: {exc}")
+            raise RuntimeError(f"Safe Browsing API prediction failed: {exc}")
 
         sb_result['reachability'] = reachability
         return sb_result
