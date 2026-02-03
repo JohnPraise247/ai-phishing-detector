@@ -256,31 +256,35 @@ def _is_benign_label(label: str) -> bool:
     """
     Check if a label indicates a benign/safe URL.
     Handles both semantic ('benign') and numeric ('0') labels for robustness.
+    Numeric labels should be converted by predictor.py, but we handle them here as fallback.
     """
-    return label in ('benign', '0', 0)
+    return label.lower() in ('benign', '0')
 
 def _get_model_label_display(model_label: str) -> str:
     """Map model labels to user-friendly display names."""
-    label_map = {
-        'defacement': 'Defacement (Hacked)',
-        'benign': 'Benign (Safe)',
-        'phishing': 'Phishing (Danger)',
-        'malware': 'Malware (Virus)',
-        # Fallback for numeric labels (should be converted in predictor.py)
-        # These fallbacks help catch edge cases but should rarely be used
+    # Check numeric labels before lowercasing (since '0'.lower() == '0')
+    numeric_label_map = {
         '0': 'Benign (Safe)',
         '1': 'Defacement (Hacked)',
         '2': 'Phishing (Danger)',
         '3': 'Malware (Virus)'
     }
-    display = label_map.get(model_label.lower(), model_label.replace('_', ' ').title())
     
-    # Log when numeric fallback is used (indicates predictor.py conversion may have failed)
-    if model_label in ('0', '1', '2', '3'):
+    if model_label in numeric_label_map:
+        # Log when numeric fallback is used (indicates predictor.py conversion may have failed)
         logging.warning(f"Numeric label '{model_label}' encountered in display function. "
                        "Expected semantic label from predictor.py.")
+        return numeric_label_map[model_label]
     
-    return display
+    # Handle semantic labels
+    semantic_label_map = {
+        'defacement': 'Defacement (Hacked)',
+        'benign': 'Benign (Safe)',
+        'phishing': 'Phishing (Danger)',
+        'malware': 'Malware (Virus)'
+    }
+    
+    return semantic_label_map.get(model_label.lower(), model_label.replace('_', ' ').title())
 
 def _derive_status(model_label: str, reachability: dict, risk_score: int, redirect_count: int, use_model: bool = False) -> tuple[str, str]:
     # Determine final host (if available) so we can apply whitelisting
