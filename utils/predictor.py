@@ -62,11 +62,28 @@ def load_model(local_path: str, url: Optional[str] = None):
 # -----------------------------
 # Prediction helpers
 # -----------------------------
+
+# Mapping from numeric labels to semantic labels
+# Standard phishing dataset label mapping
+# Supports both string and integer keys for robustness
+LABEL_MAP = {
+    '0': 'benign',      # Safe/legitimate URL
+    '1': 'defacement',  # Website defacement/hacking
+    '2': 'phishing',    # Phishing attempt
+    '3': 'malware',     # Malware/virus distribution
+    0: 'benign',
+    1: 'defacement',
+    2: 'phishing',
+    3: 'malware',
+}
+
 def _model_predict(model, payload):
     """Run model.predict and optionally predict_proba on payload."""
     try:
         pred = model.predict(payload)
-        label = str(pred[0])
+        raw_label = pred[0]
+        # Convert numeric labels to semantic labels (handles both int and str)
+        label = LABEL_MAP.get(raw_label, str(raw_label))
     except Exception as e:
         logging.exception("Model prediction raised an exception")
         raise RuntimeError(f"Model prediction failed: {e}")

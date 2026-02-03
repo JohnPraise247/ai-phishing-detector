@@ -252,15 +252,39 @@ def _compute_risk_indicators(parsed, url_input):
 
     return risk_indicators, risk_score
 
+def _is_benign_label(label: str) -> bool:
+    """
+    Check if a label indicates a benign/safe URL.
+    Handles both semantic ('benign') and numeric ('0') labels for robustness.
+    Numeric labels should be converted by predictor.py, but we handle them here as fallback.
+    """
+    return label.lower() in ('benign', '0')
+
 def _get_model_label_display(model_label: str) -> str:
     """Map model labels to user-friendly display names."""
-    label_map = {
+    # Check numeric labels before lowercasing (since '0'.lower() == '0')
+    numeric_label_map = {
+        '0': 'Benign (Safe)',
+        '1': 'Defacement (Hacked)',
+        '2': 'Phishing (Danger)',
+        '3': 'Malware (Virus)'
+    }
+    
+    if model_label in numeric_label_map:
+        # Log when numeric fallback is used (indicates predictor.py conversion may have failed)
+        logging.warning(f"Numeric label '{model_label}' encountered in display function. "
+                       "Expected semantic label from predictor.py.")
+        return numeric_label_map[model_label]
+    
+    # Handle semantic labels
+    semantic_label_map = {
         'defacement': 'Defacement (Hacked)',
         'benign': 'Benign (Safe)',
         'phishing': 'Phishing (Danger)',
         'malware': 'Malware (Virus)'
     }
-    return label_map.get(model_label.lower(), model_label.replace('_', ' ').title())
+    
+    return semantic_label_map.get(model_label.lower(), model_label.replace('_', ' ').title())
 
 def _derive_status(model_label: str, reachability: dict, risk_score: int, redirect_count: int, use_model: bool = False) -> tuple[str, str]:
     # Determine final host (if available) so we can apply whitelisting
@@ -279,7 +303,9 @@ def _derive_status(model_label: str, reachability: dict, risk_score: int, redire
 
     if not reachability.get('reachable'):
         return "Suspicious", "Host is unreachable and could be down, so we cannot confirm it as safe."
-    if model_label != 'benign':
+    
+    # Check if label indicates safe/benign
+    if not _is_benign_label(model_label):
         # Only show Safe Browsing message when not in model mode
         if use_model:
             label_display = _get_model_label_display(model_label)
@@ -471,8 +497,8 @@ with tab1:
                 if spinner_active:
                     spinner.__exit__(None, None, None)
 
-
-            is_phishing = model_label != 'benign'
+            # Check if label indicates phishing/malicious
+            is_phishing = not _is_benign_label(model_label)
             displayed_label = _get_model_label_display(model_label)
 
             st.markdown("---")
@@ -713,7 +739,8 @@ with tab2:
                     confidence = 0.0
                     reachability = {}
 
-                is_phishing = label != 'benign'
+                # Check if label indicates phishing/malicious
+                is_phishing = not _is_benign_label(label)
                 reachable = reachability.get('reachable', True)
                 if not reachable:
                     status = 'Unreachable'
