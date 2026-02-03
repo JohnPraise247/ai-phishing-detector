@@ -1,0 +1,92 @@
+================================================================================
+                   URL DETECTION - CATEGORY EXAMPLES
+================================================================================
+
+The ML model (trained on Kaggle dataset) classifies URLs into 4 categories:
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ CATEGORY 0: BENIGN (SAFE)                                               │
+├──────────────────────────────────────────────────────────────────────────┤
+│ Display: "Benign (Safe)"                                                 │
+│ Status:  "URL Appears Safe" (Green background)                           │
+│                                                                          │
+│ Test URLs:                                                               │
+│   ✓ https://google.com                                                   │
+│   ✓ https://facebook.com                                                 │
+│   ✓ https://github.com                                                   │
+│   ✓ https://amazon.com                                                   │
+│                                                                          │
+│ Features: Well-known domains, HTTPS, valid SSL, normal structure        │
+└──────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ CATEGORY 1: DEFACEMENT (HACKED)                                         │
+├──────────────────────────────────────────────────────────────────────────┤
+│ Display: "Defacement (Hacked)"                                           │
+│ Status:  "Dangerous Website Detected" (Red background)                   │
+│                                                                          │
+│ Test URLs:                                                               │
+│   ⚠ https://compromised-site.com/hacked.html                            │
+│   ⚠ https://vulnerable-cms.org/wp-admin/defaced                         │
+│   ⚠ https://old-site.net/index.php?hacked=true                          │
+│                                                                          │
+│ Features: Compromised sites, unusual paths, injection patterns          │
+└──────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ CATEGORY 2: PHISHING (DANGER)                                           │
+├──────────────────────────────────────────────────────────────────────────┤
+│ Display: "Phishing (Danger)"                                             │
+│ Status:  "Dangerous Website Detected" (Red background)                   │
+│                                                                          │
+│ Test URLs:                                                               │
+│   ⚠ https://paypal-verify.tk/login                                      │
+│   ⚠ https://facebook-security.ml/verify                                 │
+│   ⚠ https://gooogle.com (typosquatting)                                 │
+│   ⚠ https://amazon-account-update.xyz                                   │
+│                                                                          │
+│ Features: Typosquatting, suspicious TLDs (.tk, .ml), verify keywords   │
+└──────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ CATEGORY 3: MALWARE (VIRUS)                                             │
+├──────────────────────────────────────────────────────────────────────────┤
+│ Display: "Malware (Virus)"                                               │
+│ Status:  "Dangerous Website Detected" (Red background)                   │
+│                                                                          │
+│ Test URLs:                                                               │
+│   ⚠ https://free-download.ml/installer.exe                              │
+│   ⚠ https://crack-tools.tk/keygen                                       │
+│   ⚠ https://192.168.1.100:8080/payload.zip                              │
+│   ⚠ https://suspicious-software.ga/download                             │
+│                                                                          │
+│ Features: Download patterns, IP addresses, non-standard ports           │
+└──────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+                            QUICK REFERENCE
+================================================================================
+
+Label | Semantic    | Display              | Status   | Color | Risk
+------|-------------|----------------------|----------|-------|------
+  0   | benign      | Benign (Safe)        | Safe     | Green | Low
+  1   | defacement  | Defacement (Hacked)  | Not Safe | Red   | High
+  2   | phishing    | Phishing (Danger)    | Not Safe | Red   | High
+  3   | malware     | Malware (Virus)      | Not Safe | Red   | High
+
+================================================================================
+                           HOW TO TEST
+================================================================================
+
+1. Open URL Detection page
+2. Select "Model (ML-based)" mode
+3. Enter test URL from above
+4. Click "Check URL"
+5. Verify result matches expected category
+
+For batch testing:
+- Switch to "Batch URL Analysis" tab
+- Paste URLs (one per line) or upload file
+- Click "Analyze All URLs"
+
+================================================================================
