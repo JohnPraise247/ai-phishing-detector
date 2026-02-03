@@ -6,3 +6,10 @@ note.txt
 /sample_emails
 /sample_urls
 /docs
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python

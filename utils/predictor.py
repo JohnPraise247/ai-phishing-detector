@@ -352,29 +352,58 @@ def _interpret_safebrowsing_match(full_hash) -> tuple[str, float]:
     return label, confidence
 
 
-def predict_url(url_input: str, model_path=None, reachability: Optional[Dict[str, Any]] = None):
-    """Use Google Safe Browsing to classify a single URL."""
-    api_key = _env_model_url("SAFE_BROWSING_API_KEY", "SAFE_BROWSING_API_KEY")
-    if not api_key:
-        raise RuntimeError("SAFE_BROWSING_API_KEY is required for URL predictions.")
-
+def predict_url(url_input: str, model_path=None, reachability: Optional[Dict[str, Any]] = None, use_model: bool = False):
+    """
+    Classify a single URL using either Google Safe Browsing API or a machine learning model.
+    
+    Args:
+        url_input: URL to classify
+        model_path: Path to the model file (used when use_model=True)
+        reachability: Optional pre-computed reachability data
+        use_model: If True, use ML model; if False, use Safe Browsing API (default)
+    """
     if reachability is None:
         reachability = _probe_url(url_input)
     else:
         reachability = reachability if isinstance(reachability, dict) else {}
 
     if not reachability.get('reachable'):
-        # Skip Safe Browsing lookup when the host is not reachable
+        # Skip prediction when the host is not reachable
         return {"label": "unreachable", "confidence": 0.0, "reachability": reachability}
 
-    try:
-        sb_result = _safe_browsing_lookup(url_input, api_key)
-    except requests.RequestException as exc:
-        logging.exception("Safe Browsing lookup failed")
-        raise RuntimeError(f"Model prediction failed: {exc}")
+    if use_model:
+        # Use ML model for prediction
+        if model_path is None:
+            model_path = "models/url_model.joblib"
+        
+        model_url = _env_model_url("MODEL_URL", "MODEL_URL")
+        if not model_url and not os.path.exists(model_path):
+            raise RuntimeError("MODEL_URL environment variable is required for model-based URL predictions.")
+        
+        try:
+            # Model is cached by load_model function, so repeated calls won't reload
+            model = load_model(model_path, model_url)
+            features = _url_feature_vector(url_input)
+            result = _model_predict(model, [features])
+            result['reachability'] = reachability
+            return result
+        except Exception as exc:
+            logging.exception("Model-based URL prediction failed")
+            raise RuntimeError(f"Model prediction failed: {exc}")
+    else:
+        # Use Safe Browsing API for prediction
+        api_key = _env_model_url("SAFE_BROWSING_API_KEY", "SAFE_BROWSING_API_KEY")
+        if not api_key:
+            raise RuntimeError("SAFE_BROWSING_API_KEY is required for API-based URL predictions.")
 
-    sb_result['reachability'] = reachability
-    return sb_result
+        try:
+            sb_result = _safe_browsing_lookup(url_input, api_key)
+        except requests.RequestException as exc:
+            logging.exception("Safe Browsing lookup failed")
+            raise RuntimeError(f"Safe Browsing API prediction failed: {exc}")
+
+        sb_result['reachability'] = reachability
+        return sb_result
 
 
 def probe_url(url_input: str) -> Dict[str, Any]:

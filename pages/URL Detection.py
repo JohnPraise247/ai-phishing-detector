@@ -345,6 +345,15 @@ st.markdown("""
 st.title("URL Phishing Detection")
 st.markdown("Check if a website is safe to visit using live reputation scoring from the URL service.")
 
+# Detection mode selector
+detection_mode = st.radio(
+    "Detection Mode:",
+    ["API (Safe Browsing)", "Model (ML-based)"],
+    horizontal=True,
+    help="Choose between Safe Browsing API or machine learning model for URL detection"
+)
+use_model = detection_mode == "Model (ML-based)"
+
 # Main tabs
 tab1, tab2 = st.tabs(["Single URL Check", "Batch URL Analysis"])
 
@@ -430,7 +439,7 @@ with tab1:
                     st.stop()
 
                 try:
-                    result = predict_url(url_input, reachability=reachability)
+                    result = predict_url(url_input, reachability=reachability, use_model=use_model)
                     model_label = result.get('label', 'benign').lower()
                     confidence = float(result.get('confidence', 0.0))
                     reachability = result.get('reachability', reachability)
@@ -677,7 +686,7 @@ with tab2:
                     continue
 
                 try:
-                    prediction = predict_url(url)
+                    prediction = predict_url(url, use_model=use_model)
                     label = prediction.get('label', 'benign').lower()
                     confidence = float(prediction.get('confidence', 0.0))
                     reachability = prediction.get('reachability', {})

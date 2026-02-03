@@ -53,6 +53,9 @@ st.markdown("""
 st.title("Email Phishing Detection")
 st.markdown("Analyze email content to detect potential phishing attempts using AI.")
 
+# Detection method indicator
+st.info("**Detection Method:** Machine Learning Model Only (no API option available)")
+
 # Helper: render the shared email result panel
 def _render_email_result(is_spam, displayed_label, email_body, subject, sender_email):
     st.markdown("---")
