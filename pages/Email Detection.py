@@ -322,7 +322,8 @@ with tab3:
     batch_file = st.file_uploader("Upload CSV file", type=['csv'])
     
     if batch_file:
-        df = pd.read_csv(batch_file)
+        # Use utf-8-sig encoding to handle BOM characters
+        df = pd.read_csv(batch_file, encoding='utf-8-sig')
         columns_lower = {col.lower(): col for col in df.columns}
         if 'subject' not in columns_lower or 'body' not in columns_lower:
             st.error("CSV must include both `subject` and `body` columns.")
