@@ -428,10 +428,39 @@ def probe_url(url_input: str) -> Dict[str, Any]:
     return _probe_url(url_input)
 
 def predict_email(subject: str, body: str, model_path="models/email_model.joblib"):
-    """Predict email content using the cached email model (subject+body only)."""
+    """Predict email content using the cached email model (subject+body only).
+    
+    Email model outputs binary classification (0 or 1):
+    - 0: Non-spam/Ham (legitimate email)
+    - 1: Spam (phishing/malicious email)
+    """
     # Use your secret MODEL_EMAIL
     model_url = _env_model_url("EMAIL_MODEL_URL", "MODEL_EMAIL")
     model = load_model(model_path, model_url)
     content = " ".join(filter(None, [subject, body])).strip()
     payload = [content or "empty"]
-    return _model_predict(model, payload)
+    
+    # Email prediction should NOT use the URL LABEL_MAP
+    # Email models are binary classifiers (spam vs non-spam)
+    try:
+        pred = model.predict(payload)
+        raw_label = pred[0]
+        
+        # Validate that the model output is binary (0 or 1)
+        # Convert to int to handle numpy integer types (e.g., numpy.int64)
+        try:
+            label_int = int(raw_label)
+            if label_int not in (0, 1):
+                logging.warning(f"Unexpected email model output: {raw_label} (type: {type(raw_label).__name__}). Expected 0 or 1.")
+        except (ValueError, TypeError):
+            logging.warning(f"Non-numeric email model output: {raw_label} (type: {type(raw_label).__name__}). Expected 0 or 1.")
+        
+        # Convert to string for consistency with _calculate_confidence
+        # which normalizes all class labels to strings for comparison
+        label = str(raw_label)
+    except Exception as e:
+        logging.exception("Email model prediction raised an exception")
+        raise RuntimeError(f"Email model prediction failed: {e}")
+
+    confidence = _calculate_confidence(model, payload, label)
+    return {'label': label, 'confidence': confidence}
