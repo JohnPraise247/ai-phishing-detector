@@ -428,10 +428,28 @@ def probe_url(url_input: str) -> Dict[str, Any]:
     return _probe_url(url_input)
 
 def predict_email(subject: str, body: str, model_path="models/email_model.joblib"):
-    """Predict email content using the cached email model (subject+body only)."""
+    """Predict email content using the cached email model (subject+body only).
+    
+    Email model outputs binary classification (0 or 1):
+    - 0: Non-spam/Ham (legitimate email)
+    - 1: Spam (phishing/malicious email)
+    """
     # Use your secret MODEL_EMAIL
     model_url = _env_model_url("EMAIL_MODEL_URL", "MODEL_EMAIL")
     model = load_model(model_path, model_url)
     content = " ".join(filter(None, [subject, body])).strip()
     payload = [content or "empty"]
-    return _model_predict(model, payload)
+    
+    # Email prediction should NOT use the URL LABEL_MAP
+    # Email models are binary classifiers (spam vs non-spam)
+    try:
+        pred = model.predict(payload)
+        raw_label = pred[0]
+        # Keep raw numeric label for email (0 or 1)
+        label = str(raw_label)
+    except Exception as e:
+        logging.exception("Email model prediction raised an exception")
+        raise RuntimeError(f"Email model prediction failed: {e}")
+
+    confidence = _calculate_confidence(model, payload, label)
+    return {'label': label, 'confidence': confidence}
