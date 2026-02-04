@@ -223,12 +223,12 @@ Security Team"""
 
 with tab2:
     st.markdown("### Upload Email File")
-    st.info("Upload .eml, .msg, or .txt files containing email content")
+    st.info("Upload .eml or .txt files containing email content")
     
     uploaded_file = st.file_uploader(
         "Choose an email file",
-        type=['eml', 'msg', 'txt'],
-        help="Supported formats: .eml, .msg, .txt"
+        type=['eml', 'txt'],
+        help="Supported formats: .eml, .txt"
     )
     
     if uploaded_file:
