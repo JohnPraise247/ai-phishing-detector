@@ -509,9 +509,10 @@ with tab1:
             extracted_urls = _extract_urls_from_text(f"{scheme}{raw_input}")
             
             if len(extracted_urls) > 1:
-                st.warning(
+                st.error(
                     f"Multiple URLs detected ({len(extracted_urls)} URLs). "
-                    f"Please use the **Batch URL Analysis** tab for checking multiple URLs at once."
+                    f"Single URL check only supports one URL at a time. "
+                    f"Please use the **Batch URL Analysis** tab for checking multiple URLs."
                 )
                 with st.expander("URLs detected:"):
                     for i, detected_url in enumerate(extracted_urls, 1):
@@ -803,11 +804,24 @@ with tab2:
         if urls_text:
             # Remove BOM if present and strip quotes from URLs
             clean_text = urls_text.lstrip('\ufeff')
-            urls_to_check = [
+            raw_urls = [
                 line.strip().strip('"\'')
                 for line in clean_text.split('\n')
                 if line.strip()
             ]
+            # Normalize URLs: add https:// scheme if missing
+            urls_to_check = []
+            for url in raw_urls:
+                if url.startswith(('http://', 'https://')):
+                    urls_to_check.append(url)
+                elif '.' in url and len(url) > 3:
+                    # Looks like a domain without scheme - check if it's a valid domain pattern
+                    if re.match(r'^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}', url):
+                        urls_to_check.append(f'https://{url}')
+                    else:
+                        urls_to_check.append(url)  # Keep as-is, will be marked invalid later
+                else:
+                    urls_to_check.append(url)  # Keep as-is, will be marked invalid later
     
     if urls_to_check:
         st.info(f"Ready to analyze {len(urls_to_check)} URLs")
