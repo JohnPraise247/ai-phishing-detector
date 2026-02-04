@@ -295,7 +295,7 @@ def _probe_url(url_input: str) -> Dict[str, Any]:
 
 def _safe_browsing_lookup(url_input: str, api_key: str) -> Dict[str, str]:
     """
-    Look up URL in Safe Browsing using the v5alpha1 hashes:search endpoint.
+    Look up URL in Safe Browsing using the v5 hashes:search endpoint.
     This requires computing URL hash prefixes locally and sending them.
     """
     # Compute all hash prefixes for URL expressions
@@ -306,7 +306,7 @@ def _safe_browsing_lookup(url_input: str, api_key: str) -> Dict[str, str]:
     # Build the hash prefixes parameter (base64-encoded, as separate params)
     hash_prefixes_b64 = [base64.b64encode(prefix).decode('ascii') for _, prefix in url_hashes]
     
-    endpoint = "https://safebrowsing.googleapis.com/v5alpha1/hashes:search"
+    endpoint = "https://safebrowsing.googleapis.com/v5/hashes:search"
     params = {
         "key": api_key,
         "hashPrefixes": hash_prefixes_b64
