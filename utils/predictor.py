@@ -462,7 +462,7 @@ def predict_email(subject: str, body: str, model_path="models/email_model.joblib
             logging.warning(f"Email model returned {label_int}, which suggests a 4-class URL model is being used. Mapping to spam (1).")
             label_int = 1
         elif label_int not in (0, 1):
-            logging.warning(f"Unexpected email model output: {raw_label} (type: {type(raw_label).__name__}). Expected 0-3. Defaulting to 0 (non-spam).")
+            logging.warning(f"Unexpected email model output: {raw_label} (type: {type(raw_label).__name__}). Expected 0-3, but got {label_int}. Defaulting to 0 (non-spam).")
             label_int = 0
         
         # Convert to string for consistency with _calculate_confidence
