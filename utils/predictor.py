@@ -447,10 +447,12 @@ def predict_email(subject: str, body: str, model_path="models/email_model.joblib
         raw_label = pred[0]
         
         # Validate that the model output is binary (0 or 1)
-        if raw_label not in (0, 1, '0', '1'):
+        # Most sklearn models return numpy integers
+        if raw_label not in (0, 1):
             logging.warning(f"Unexpected email model output: {raw_label}. Expected 0 or 1.")
         
-        # Keep raw numeric label for email (0 or 1)
+        # Convert to string for consistency with _calculate_confidence
+        # which normalizes all class labels to strings for comparison
         label = str(raw_label)
     except Exception as e:
         logging.exception("Email model prediction raised an exception")
