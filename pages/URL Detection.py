@@ -747,14 +747,11 @@ with tab1:
 
 with tab2:
     st.markdown("### Batch URL Analysis")
-    st.info("Upload a text file or CSV with multiple URLs for bulk checking")
+    st.info("Upload a text file or paste URLs for bulk checking (one URL per line)")
     
     # Sample data
-    st.markdown("**Expected Format:**")
-    st.markdown("For text files (one URL per line):")
+    st.markdown("**Expected Format (one URL per line):**")
     st.code("https://example1.com\nhttps://example2.com\nhttps://example3.com", language="text")
-    st.markdown("For CSV files (with 'url' column header):")
-    st.code("url\nhttps://example1.com\nhttps://example2.com", language="text")
     
     # URL input methods
     input_method = st.radio("Choose input method:", ["Upload File", "Paste URLs"])
@@ -764,49 +761,20 @@ with tab2:
     if input_method == "Upload File":
         uploaded_file = st.file_uploader(
             "Upload file with URLs",
-            type=['txt', 'csv'],
-            help="One URL per line (txt) or CSV with 'url' column"
+            type=['txt'],
+            help="Text file with one URL per line"
         )
         
         if uploaded_file:
             # Use utf-8-sig to handle BOM characters
             content = uploaded_file.read().decode('utf-8-sig')
-            file_lower = uploaded_file.name.lower()
             
-            if file_lower.endswith('.csv'):
-                # Use pandas to properly parse CSV files with headers
-                import io
-                try:
-                    df = pd.read_csv(io.StringIO(content))
-                    # Look for a 'url' column (case-insensitive)
-                    columns_lower = {col.lower(): col for col in df.columns}
-                    if 'url' in columns_lower:
-                        url_col = columns_lower['url']
-                        urls_to_check = [
-                            _normalize_url(str(u))
-                            for u in df[url_col].dropna()
-                            if str(u).strip()
-                        ]
-                    else:
-                        # Fallback: use first column if no 'url' column found
-                        first_col = df.columns[0]
-                        urls_to_check = [
-                            _normalize_url(str(u))
-                            for u in df[first_col].dropna()
-                            if str(u).strip()
-                        ]
-                        st.warning(f"No 'url' column found in CSV. Using first column: '{first_col}'")
-                except Exception as e:
-                    logging.exception("Failed to parse CSV file")
-                    st.error(f"Failed to parse CSV file: {e}")
-                    urls_to_check = []
-            else:
-                # Plain text file: one URL per line
-                urls_to_check = [
-                    _normalize_url(line.strip())
-                    for line in content.split('\n')
-                    if line.strip()
-                ]
+            # Plain text file: one URL per line
+            urls_to_check = [
+                _normalize_url(line.strip())
+                for line in content.split('\n')
+                if line.strip()
+            ]
             
             if urls_to_check:
                 st.success(f"Loaded {len(urls_to_check)} URLs")
