@@ -145,8 +145,8 @@ def _interpret_email_label(model_label):
     - 0 or '0' = Non-spam/Ham (legitimate email)
     - 1 or '1' = Spam (phishing/malicious email)
     """
-    # Handle None, empty string, or missing label
-    if not model_label and model_label != 0:
+    # Handle None or empty string edge cases
+    if model_label is None or (isinstance(model_label, str) and not model_label.strip()):
         return False, 'Unknown'
     
     # Normalize to string and lowercase for comparison
