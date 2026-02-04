@@ -138,12 +138,31 @@ def _render_email_result(is_spam, displayed_label, email_body, subject, sender_e
 
 
 def _interpret_email_label(model_label):
-    normalized = str(model_label).lower()
+    """
+    Interpret the model's label output as spam or not spam.
+    
+    Email models return binary classification:
+    - 0 or '0' = Non-spam/Ham (legitimate email)
+    - 1 or '1' = Spam (phishing/malicious email)
+    """
+    # Handle None, empty string, or missing label
+    if not model_label and model_label != 0:
+        return False, 'Unknown'
+    
+    # Normalize to string and lowercase for comparison
+    normalized = str(model_label).strip().lower()
+    
+    # Check for spam indicators
     if normalized in ('1', 'spam', 'spammy'):
         return True, 'Spam'
-    if normalized in ('0', 'ham', 'real', 'non-spam'):
+    
+    # Check for non-spam indicators  
+    if normalized in ('0', 'ham', 'real', 'non-spam', 'legitimate'):
         return False, 'Real'
-    return False, model_label or 'Unknown'
+    
+    # Fallback for unexpected values
+    logging.warning(f"Unexpected email label value: {model_label} (normalized: {normalized})")
+    return False, 'Unknown'
 
 # Tabs for different input methods
 tab1, tab2, tab3 = st.tabs(["Paste Email Content", "Upload Email File", "Batch Analysis"])

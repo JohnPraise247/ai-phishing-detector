@@ -447,17 +447,19 @@ def predict_email(subject: str, body: str, model_path="models/email_model.joblib
         raw_label = pred[0]
         
         # Validate that the model output is binary (0 or 1)
-        # Convert to int to handle numpy integer types (e.g., numpy.int64)
+        # Convert to int first to handle numpy integer types (e.g., numpy.int64)
         try:
             label_int = int(raw_label)
             if label_int not in (0, 1):
-                logging.warning(f"Unexpected email model output: {raw_label} (type: {type(raw_label).__name__}). Expected 0 or 1.")
+                logging.warning(f"Unexpected email model output: {raw_label} (type: {type(raw_label).__name__}). Expected 0 or 1. Defaulting to 0.")
+                label_int = 0
         except (ValueError, TypeError):
-            logging.warning(f"Non-numeric email model output: {raw_label} (type: {type(raw_label).__name__}). Expected 0 or 1.")
+            logging.warning(f"Non-numeric email model output: {raw_label} (type: {type(raw_label).__name__}). Expected 0 or 1. Defaulting to 0.")
+            label_int = 0
         
         # Convert to string for consistency with _calculate_confidence
         # which normalizes all class labels to strings for comparison
-        label = str(raw_label)
+        label = str(label_int)
     except Exception as e:
         logging.exception("Email model prediction raised an exception")
         raise RuntimeError(f"Email model prediction failed: {e}")
