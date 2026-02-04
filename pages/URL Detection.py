@@ -15,6 +15,37 @@ def _normalize_host(raw_input: str) -> str:
     cleaned = re.sub(r'^(https?://)', '', cleaned, flags=re.IGNORECASE)
     return cleaned
 
+
+def _extract_urls_from_text(text: str) -> list[str]:
+    """
+    Extract all valid URLs from pasted text.
+    Handles URLs separated by newlines, spaces, or commas.
+    Returns a list of URLs found in the text.
+    """
+    if not text or not text.strip():
+        return []
+    
+    # Split by newlines, spaces, or commas
+    # First, normalize line endings and split by newlines
+    lines = text.replace('\r\n', '\n').replace('\r', '\n').split('\n')
+    
+    urls = []
+    for line in lines:
+        # Further split by spaces and commas
+        parts = re.split(r'[\s,]+', line)
+        for part in parts:
+            part = part.strip().strip('"\'')
+            # Check if this looks like a URL
+            if part.startswith(('http://', 'https://')):
+                urls.append(part)
+            elif '.' in part and len(part) > 3:
+                # Could be a domain without scheme - check if it looks like a domain
+                # e.g., "example.com" or "example.com/path"
+                if re.match(r'^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}', part):
+                    urls.append(f'https://{part}')
+    
+    return urls
+
 def _normalize_host_input():
     st.session_state["website_url"] = _normalize_host(st.session_state.get("website_url", ""))
 
@@ -473,6 +504,20 @@ with tab1:
         elif not url_input.startswith(('http://', 'https://')):
             st.warning("URL should start with http:// or https://")
         else:
+            # Check if multiple URLs were pasted
+            raw_input = st.session_state.get("website_url", "")
+            extracted_urls = _extract_urls_from_text(f"{scheme}{raw_input}")
+            
+            if len(extracted_urls) > 1:
+                st.warning(
+                    f"Multiple URLs detected ({len(extracted_urls)} URLs). "
+                    f"Please use the **Batch URL Analysis** tab for checking multiple URLs at once."
+                )
+                with st.expander("URLs detected:"):
+                    for i, detected_url in enumerate(extracted_urls, 1):
+                        st.code(detected_url, language=None)
+                st.stop()
+            
             parsed = urlparse(url_input)
             domain = parsed.netloc
             if not _has_valid_domain(domain):
