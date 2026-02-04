@@ -803,7 +803,7 @@ with tab2:
             else:
                 # Plain text file: one URL per line
                 urls_to_check = [
-                    _normalize_url(line)
+                    _normalize_url(line.strip())
                     for line in content.split('\n')
                     if line.strip()
                 ]
@@ -821,7 +821,7 @@ with tab2:
             # Remove BOM if present and normalize URLs
             clean_text = urls_text.lstrip('\ufeff')
             urls_to_check = [
-                _normalize_url(line)
+                _normalize_url(line.strip())
                 for line in clean_text.split('\n')
                 if line.strip()
             ]
