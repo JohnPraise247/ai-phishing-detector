@@ -423,6 +423,133 @@ def predict_url(url_input: str, model_path=None, reachability: Optional[Dict[str
         return sb_result
 
 
+def predict_urls(url_list: Sequence[str], model_path: Optional[str] = None, use_model: bool = False) -> list[Dict[str, Any]]:
+    """
+    Classify multiple URLs using either Google Safe Browsing API or a machine learning model.
+    
+    For Model mode: Batches all URL features for efficient single model prediction.
+    For API mode: Processes URLs individually (Safe Browsing API uses hash-based lookups).
+    
+    Args:
+        url_list: List of URLs to classify
+        model_path: Path to the model file (used when use_model=True)
+        use_model: If True, use ML model; if False, use Safe Browsing API (default)
+    
+    Returns:
+        List of prediction results, one per URL
+    """
+    if not url_list:
+        return []
+    
+    results = []
+    
+    if use_model:
+        # Model mode: batch all features for efficient prediction
+        if model_path is None:
+            model_path = "models/url_model.joblib"
+        
+        model_url = _env_model_url("MODEL_URL", "MODEL_URL")
+        if not model_url and not os.path.exists(model_path):
+            raise RuntimeError("MODEL_URL environment variable is required for model-based URL predictions.")
+        
+        # Load model once for all predictions
+        model = load_model(model_path, model_url)
+        
+        # First, probe all URLs to get reachability
+        reachability_list = []
+        for url in url_list:
+            reachability_list.append(_probe_url(url))
+        
+        # Build feature vectors for reachable URLs
+        url_indices = []  # Track which URLs are reachable
+        features_batch = []
+        
+        for i, (url, reachability) in enumerate(zip(url_list, reachability_list)):
+            # Explicitly check for True/False to distinguish from None
+            if reachability.get('reachable') is not True:
+                # URL is unreachable or unknown, add result immediately
+                results.append({"label": "unreachable", "confidence": 0.0, "reachability": reachability})
+            else:
+                # URL is reachable, add to batch
+                url_indices.append(i)
+                features_batch.append(_url_feature_vector(url))
+                results.append(None)  # Placeholder
+        
+        # Batch predict for all reachable URLs
+        if features_batch:
+            try:
+                predictions = model.predict(features_batch)
+                
+                # Calculate confidence for all predictions in batch (if model supports it)
+                confidences = []
+                if hasattr(model, 'predict_proba'):
+                    # Batch call to predict_proba
+                    all_probs = model.predict_proba(features_batch)
+                    classes = [str(c) for c in model.classes_] if hasattr(model, 'classes_') else []
+                    for i, pred in enumerate(predictions):
+                        label = LABEL_MAP.get(pred, str(pred))
+                        if label in classes:
+                            confidences.append(float(all_probs[i][classes.index(label)]))
+                        else:
+                            confidences.append(float(max(all_probs[i])))
+                elif hasattr(model, 'decision_function'):
+                    # Batch call to decision_function
+                    import math
+                    all_decisions = model.decision_function(features_batch)
+                    for decision in all_decisions:
+                        if hasattr(decision, '__iter__'):
+                            score = float(max(decision))
+                        else:
+                            score = float(decision)
+                        confidences.append(1 / (1 + math.exp(-score)))
+                else:
+                    # No probability method available
+                    confidences = [0.5] * len(predictions)
+                
+                # Assign results
+                for batch_idx, (pred, original_idx) in enumerate(zip(predictions, url_indices)):
+                    raw_label = pred
+                    label = LABEL_MAP.get(raw_label, str(raw_label))
+                    
+                    results[original_idx] = {
+                        'label': label,
+                        'confidence': confidences[batch_idx],
+                        'reachability': reachability_list[original_idx]
+                    }
+            except Exception as exc:
+                logging.exception("Batch model prediction failed")
+                # Fill in errors for all pending results
+                for original_idx in url_indices:
+                    if results[original_idx] is None:
+                        results[original_idx] = {
+                            'label': 'unknown',
+                            'confidence': 0.0,
+                            'reachability': reachability_list[original_idx],
+                            'error': str(exc)
+                        }
+    else:
+        # API mode: process URLs individually (Safe Browsing uses hash-based lookups)
+        api_key = _env_model_url("SAFE_BROWSING_API_KEY", "SAFE_BROWSING_API_KEY")
+        if not api_key:
+            raise RuntimeError("SAFE_BROWSING_API_KEY is required for API-based URL predictions.")
+        
+        for url in url_list:
+            try:
+                result = predict_url(url, use_model=False)
+                results.append(result)
+            except Exception as exc:
+                logging.exception(f"Safe Browsing lookup failed for {url}")
+                reachability = _probe_url(url)
+                results.append({
+                    'label': 'unknown',
+                    'confidence': 0.0,
+                    'reachability': reachability,
+                    'error': str(exc)
+                })
+    
+    return results
+
+
 def probe_url(url_input: str) -> Dict[str, Any]:
     """Expose the reachability probe so the UI can pre-check the hostname."""
     return _probe_url(url_input)

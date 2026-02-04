@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 import logging
 
 from utils.styles import load_custom_font
-from utils.predictor import predict_url, probe_url
+from utils.predictor import predict_url, predict_urls, probe_url
 
 def _normalize_host(raw_input: str) -> str:
     cleaned = raw_input.strip()
@@ -261,7 +261,12 @@ def _is_benign_label(label: str) -> bool:
     return label.lower() in ('benign', '0')
 
 def _get_model_label_display(model_label: str) -> str:
-    """Map model labels to user-friendly display names."""
+    """Map model/API labels to user-friendly display names.
+    
+    Handles labels from both:
+    - ML Model: benign, defacement, phishing, malware (and numeric 0-3)
+    - Safe Browsing API: benign, malware, social_engineering, unwanted_software, etc.
+    """
     # Check numeric labels before lowercasing (since '0'.lower() == '0')
     numeric_label_map = {
         '0': 'Benign (Safe)',
@@ -276,12 +281,21 @@ def _get_model_label_display(model_label: str) -> str:
                        "Expected semantic label from predictor.py.")
         return numeric_label_map[model_label]
     
-    # Handle semantic labels
+    # Handle semantic labels from both ML model and Safe Browsing API
     semantic_label_map = {
+        # ML Model labels
         'defacement': 'Defacement (Hacked)',
         'benign': 'Benign (Safe)',
         'phishing': 'Phishing (Danger)',
-        'malware': 'Malware (Virus)'
+        'malware': 'Malware (Virus)',
+        # Safe Browsing API labels
+        'social_engineering': 'Phishing (Social Engineering)',
+        'unwanted_software': 'Unwanted Software',
+        'potentially_harmful_application': 'Potentially Harmful App',
+        # Additional statuses
+        'unreachable': 'Unreachable',
+        'unknown': 'Unknown',
+        'suspicious': 'Suspicious',
     }
     
     return semantic_label_map.get(model_label.lower(), model_label.replace('_', ' ').title())
@@ -760,53 +774,93 @@ with tab2:
             results = []
             errors = []
             
+            # First, filter out invalid URLs
+            valid_urls = []
+            valid_indices = []
             for i, url in enumerate(urls_to_check):
-                progress_bar.progress((i + 1) / len(urls_to_check))
-                status_text.text(f"Analyzing URL {i + 1} of {len(urls_to_check)}...")
-                
                 if not url.startswith(('http://', 'https://')):
                     errors.append(f"Skipping invalid URL: {url}")
                     results.append({
                         'URL': url,
                         'Status': 'Invalid',
-                        'Confidence': '0.0%',
+                        'Prediction Label': 'Invalid',
+                        'Reachability': 'N/A',
                         'Risk Level': 'Unknown'
                     })
-                    continue
-
-                try:
-                    prediction = predict_url(url, use_model=use_model)
-                    label = prediction.get('label', 'benign').lower()
-                    confidence = float(prediction.get('confidence', 0.0))
-                    reachability = prediction.get('reachability', {})
-                except Exception:
-                    logging.exception("Batch URL prediction failed")
-                    errors.append(f"Failed to classify {url}")
-                    label = 'unknown'
-                    confidence = 0.0
-                    reachability = {}
-
-                # Check if label indicates phishing/malicious
-                is_phishing = not _is_benign_label(label)
-                reachable = reachability.get('reachable', True)
-                if not reachable:
-                    status = 'Unreachable'
-                    risk_level = 'Unknown'
                 else:
-                    status = 'Phishing' if is_phishing else 'Safe'
-                    if label == 'unknown':
-                        status = 'Error'
-                    risk_level = 'High' if is_phishing else 'Low'
-
-                results.append({
-                    'URL': url[:50] + '...' if len(url) > 50 else url,
-                    'Status': status,
-                    'Prediction Label': _get_model_label_display(label),
-                    'Reachability': 'Reachable' if reachable else 'Unreachable',
-                    # 'Confidence': f"{confidence * 100:.1f}%",
-                    'Risk Level': risk_level
-                })
-
+                    valid_urls.append(url)
+                    valid_indices.append(i)
+                    results.append(None)  # Placeholder
+            
+            # Update progress for validation phase
+            progress_bar.progress(0.1)
+            status_text.text(f"Validated URLs. Analyzing {len(valid_urls)} valid URLs...")
+            
+            # Batch predict all valid URLs
+            if valid_urls:
+                try:
+                    predictions = predict_urls(valid_urls, use_model=use_model)
+                    
+                    # Process each prediction result
+                    for batch_idx, (url, prediction) in enumerate(zip(valid_urls, predictions)):
+                        # Update progress
+                        progress_pct = 0.1 + (0.9 * (batch_idx + 1) / len(valid_urls))
+                        progress_bar.progress(progress_pct)
+                        status_text.text(f"Processing result {batch_idx + 1} of {len(valid_urls)}...")
+                        
+                        original_idx = valid_indices[batch_idx]
+                        
+                        label = prediction.get('label', 'benign').lower()
+                        confidence = float(prediction.get('confidence', 0.0))
+                        reachability = prediction.get('reachability', {})
+                        
+                        # Check for prediction errors
+                        if prediction.get('error'):
+                            errors.append(f"Failed to classify {url}: {prediction.get('error')}")
+                        
+                        # Check if label indicates phishing/malicious
+                        is_phishing = not _is_benign_label(label)
+                        # Explicitly check reachability: None means unknown, True/False are explicit
+                        reachable = reachability.get('reachable')
+                        if reachable is True:
+                            status = 'Phishing' if is_phishing else 'Safe'
+                            if label == 'unknown':
+                                status = 'Error'
+                            risk_level = 'High' if is_phishing else 'Low'
+                            reachability_display = 'Reachable'
+                        elif reachable is False:
+                            status = 'Unreachable'
+                            risk_level = 'Unknown'
+                            reachability_display = 'Unreachable'
+                        else:
+                            # reachable is None - unknown status
+                            status = 'Unknown'
+                            risk_level = 'Unknown'
+                            reachability_display = 'Unknown'
+                        
+                        results[original_idx] = {
+                            'URL': url[:50] + '...' if len(url) > 50 else url,
+                            'Status': status,
+                            'Prediction Label': _get_model_label_display(label),
+                            'Reachability': reachability_display,
+                            'Risk Level': risk_level
+                        }
+                except Exception as e:
+                    logging.exception("Batch URL prediction failed")
+                    # Fill in error results for all pending URLs
+                    for batch_idx, url in enumerate(valid_urls):
+                        original_idx = valid_indices[batch_idx]
+                        if results[original_idx] is None:
+                            errors.append(f"Failed to classify {url}")
+                            results[original_idx] = {
+                                'URL': url[:50] + '...' if len(url) > 50 else url,
+                                'Status': 'Error',
+                                'Prediction Label': 'Error',
+                                'Reachability': 'Unknown',
+                                'Risk Level': 'Unknown'
+                            }
+            
+            progress_bar.progress(1.0)
             st.success(f"Analysis complete! Processed {len(urls_to_check)} URLs")
 
             if errors:
