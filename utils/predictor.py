@@ -442,19 +442,27 @@ def predict_email(subject: str, body: str, model_path="models/email_model.joblib
     
     # Email prediction should NOT use the URL LABEL_MAP
     # Email models are binary classifiers (spam vs non-spam)
+    # However, if a 4-class URL model is accidentally loaded, map to binary
     try:
         pred = model.predict(payload)
         raw_label = pred[0]
         
-        # Validate that the model output is binary (0 or 1)
         # Convert to int first to handle numpy integer types (e.g., numpy.int64)
         try:
             label_int = int(raw_label)
-            if label_int not in (0, 1):
-                logging.warning(f"Unexpected email model output: {raw_label} (type: {type(raw_label).__name__}). Expected 0 or 1. Defaulting to 0.")
-                label_int = 0
         except (ValueError, TypeError):
-            logging.warning(f"Non-numeric email model output: {raw_label} (type: {type(raw_label).__name__}). Expected 0 or 1. Defaulting to 0.")
+            logging.warning(f"Non-numeric email model output: {raw_label} (type: {type(raw_label).__name__}). Expected 0 or 1. Defaulting to 0 (non-spam).")
+            label_int = 0
+        
+        # Map to binary classification
+        # 0 = Non-spam/Ham (legitimate email)
+        # 1 = Spam (phishing/malicious email)
+        # If model returns 2 or 3 (phishing/malware from URL model), treat as spam (1)
+        if label_int in (2, 3):
+            logging.warning(f"Email model returned {label_int}, which suggests a 4-class URL model is being used. Mapping to spam (1).")
+            label_int = 1
+        elif label_int not in (0, 1):
+            logging.warning(f"Unexpected email model output: {raw_label} (type: {type(raw_label).__name__}). Expected 0-3. Defaulting to 0 (non-spam).")
             label_int = 0
         
         # Convert to string for consistency with _calculate_confidence
