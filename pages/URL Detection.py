@@ -46,6 +46,22 @@ def _extract_urls_from_text(text: str) -> list[str]:
     
     return urls
 
+def _normalize_url(url: str) -> str:
+    """
+    Normalize a URL by adding https:// scheme if missing.
+    Returns the normalized URL.
+    """
+    url = url.strip().strip('"\'')
+    if not url:
+        return url
+    if url.startswith(('http://', 'https://')):
+        return url
+    elif '.' in url and len(url) > 3:
+        # Looks like a domain without scheme - check if it's a valid domain pattern
+        if re.match(r'^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}', url):
+            return f'https://{url}'
+    return url
+
 def _normalize_host_input():
     st.session_state["website_url"] = _normalize_host(st.session_state.get("website_url", ""))
 
@@ -767,7 +783,7 @@ with tab2:
                     if 'url' in columns_lower:
                         url_col = columns_lower['url']
                         urls_to_check = [
-                            str(u).strip().strip('"\'')
+                            _normalize_url(str(u))
                             for u in df[url_col].dropna()
                             if str(u).strip()
                         ]
@@ -775,7 +791,7 @@ with tab2:
                         # Fallback: use first column if no 'url' column found
                         first_col = df.columns[0]
                         urls_to_check = [
-                            str(u).strip().strip('"\'')
+                            _normalize_url(str(u))
                             for u in df[first_col].dropna()
                             if str(u).strip()
                         ]
@@ -787,7 +803,7 @@ with tab2:
             else:
                 # Plain text file: one URL per line
                 urls_to_check = [
-                    line.strip().strip('"\'')
+                    _normalize_url(line)
                     for line in content.split('\n')
                     if line.strip()
                 ]
@@ -802,26 +818,13 @@ with tab2:
             placeholder="https://example1.com\nhttps://example2.com\nhttps://example3.com"
         )
         if urls_text:
-            # Remove BOM if present and strip quotes from URLs
+            # Remove BOM if present and normalize URLs
             clean_text = urls_text.lstrip('\ufeff')
-            raw_urls = [
-                line.strip().strip('"\'')
+            urls_to_check = [
+                _normalize_url(line)
                 for line in clean_text.split('\n')
                 if line.strip()
             ]
-            # Normalize URLs: add https:// scheme if missing
-            urls_to_check = []
-            for url in raw_urls:
-                if url.startswith(('http://', 'https://')):
-                    urls_to_check.append(url)
-                elif '.' in url and len(url) > 3:
-                    # Looks like a domain without scheme - check if it's a valid domain pattern
-                    if re.match(r'^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}', url):
-                        urls_to_check.append(f'https://{url}')
-                    else:
-                        urls_to_check.append(url)  # Keep as-is, will be marked invalid later
-                else:
-                    urls_to_check.append(url)  # Keep as-is, will be marked invalid later
     
     if urls_to_check:
         st.info(f"Ready to analyze {len(urls_to_check)} URLs")
