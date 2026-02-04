@@ -305,10 +305,43 @@ with tab3:
     """)
     
     sample_data = pd.DataFrame({
-        'subject': ['Hello from support', 'Verify your account'],
+        'subject': [
+            'Meeting Reminder: Project Sync at 2PM',
+            'Your Receipt for Laptop Purchase',
+            'URGENT: Your Account Has Been Suspended!!!',
+            'You Won $500,000 Lottery!!!'
+        ],
         'body': [
-            'Just checking in to see how things are going.',
-            'We detected suspicious activity. Click here to verify your account now!'
+            '''Hi John,
+
+Just a reminder about our project sync meeting scheduled for today at 2PM.
+
+We will discuss the current sprint progress and blockers.
+
+Regards,
+Aisha''',
+            '''Dear Customer,
+
+Thank you for your recent purchase. Please find your receipt attached.
+
+Order ID: TS-44521
+
+Support Team
+TechStore''',
+            '''Dear User,
+
+Your account has been suspended due to suspicious activity.
+Click the link below to verify immediately or your account will be deleted:
+
+http://fake-paypal-login.example.invalid
+
+Act now!''',
+            '''Congratulations!!!
+
+You have been selected as a winner in our international lottery.
+Send your bank details and ID to claim your prize now.
+
+Do not miss this opportunity!'''
         ]
     })
     
